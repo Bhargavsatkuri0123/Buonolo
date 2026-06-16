@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile data",
+      "type": "object",
+      "properties": {
+        "notifications_enabled": { "type": "boolean" },
+        "saved_country_id": { "type": "string" },
+        "full_name": { "type": "string" },
+        "saved_items": { "type": "array" },
+        "saved_locations": { "type": "array" },
+        "preferred_radius": { "type": "number" },
+        "updated_at": { "type": "string" }
+      }
+    },
+    "Group": {
+      "title": "Group",
+      "description": "Community group",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "admin_id": { "type": "string" },
+        "admin_name": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["name", "description", "admin_id", "admin_name", "created_at"]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "Member of a community group",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "user_name": { "type": "string" }
+      },
+      "required": ["user_id", "user_name"]
+    },
+    "GroupUpdate": {
+      "title": "GroupUpdate",
+      "description": "Update posted in a community group",
+      "type": "object",
+      "properties": {
+        "author_id": { "type": "string" },
+        "author_name": { "type": "string" },
+        "content": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["author_id", "author_name", "content", "created_at"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "User profiles, keyed by uid"
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/Group" },
+      "description": "Community groups"
+    },
+    "/groups/{groupId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Group members, keyed by user uid"
+    },
+    "/groups/{groupId}/updates/{updateId}": {
+      "schema": { "$ref": "#/entities/GroupUpdate" },
+      "description": "Group updates"
+    }
+  }
+}
