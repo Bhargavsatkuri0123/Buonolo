@@ -4,15 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Buonolo - Your Mediterranean Onboarding & Localization Companion</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjI0IiBmaWxsPSIjMDAwMEZGIi8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMiIgcj0iMTQiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iOSIgZmlsbD0ibm9uZSIvPjxjaXJjbGUgY3g9IjcwIiBjeT0iMzIiIHI9IjE0IiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjkiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNDQgNjIgVjgyIEg2MSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI5IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGZpbGw9Im5vbmUiLz48L3N2Zz4=">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjI0IiBmaWxsPSIjRkY5OTMzIi8+PGNpcmNsZSBjeD0iMzAiIGN5PSI0MCIgcj0iMTAiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iNzAiIGN5PSI0MCIgcj0iMTAiIGZpbGw9IndoaXRlIi8+PHJlY3QgeD0iNDgiIHk9IjM1IiB3aWR0aD0iNCIgaGVpZ2h0PSIyMCIgcng9IjIiIGZpbGw9IndoaXRlIi8+PHBhdGggZD0iTTMwIDY1IFE1MCA4NSA3MCA2NSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlV2lkdGg9IjgiIHN0cm9rZUxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIi8+PC9zdmc+">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
-              primary: '#E56B1F', // Metallic Orange
-              primaryLight: '#FCE7D9',
+              primary: '#F4C430', // Saffron
+              primaryLight: '#FFF8E1',
             }
           }
         }
@@ -25,7 +26,7 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #f0f4ff;
+        background-color: #fdfaf6;
         -webkit-tap-highlight-color: transparent;
       }
 
@@ -37,11 +38,11 @@
         background: transparent;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #E56B1F;
+        background: #F4C430;
         border-radius: 10px;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #CC5510;
+        background: #D4A017;
       }
 
       /* Hide scrollbar */
@@ -54,7 +55,7 @@
       }
 
       .bg-primary-gradient {
-        background: linear-gradient(135deg, #E56B1F 0%, #A54B0B 100%);
+        background: linear-gradient(135deg, #F4C430 0%, #D4A017 100%);
       }
     </style>
     <script type="importmap">
@@ -63,10 +64,7 @@
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.36.0",
-    "firebase/app": "https://esm.sh/firebase@11.1.0/app",
-    "firebase/analytics": "https://esm.sh/firebase@11.1.0/analytics",
-    "firebase/": "https://esm.sh/firebase@^12.8.0/"
+    "@google/genai": "https://esm.sh/@google/genai@^1.36.0"
   }
 }
 </script>

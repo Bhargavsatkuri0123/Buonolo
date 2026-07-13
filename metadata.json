@@ -1,10 +1,12 @@
 {
   "name": "Buonolo",
-  "description": "A simplified news and information hub for expats and immigrants, providing the latest updates on immigration rules, government benefits, and essential local news globally.",
+  "description": "A comprehensive assistant for expats and immigrants, providing localized news, emergency contacts, community connections, and essential arrival checklists for cities worldwide.",
   "logo": "data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjI0IiBmaWxsPSIjMDAwMEZGIi8+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMiIgcj0iMTQiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iOSIgZmlsbD0ibm9uZSIvPjxjaXJjbGUgY3g9IjcwIiBjeT0iMzIiIHI9IjE0IiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjkiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNDQgNjIgVjgyIEg2MSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSI5IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGZpbGw9Im5vbmUiLz48L3N2Zz4=",
   "version": "1.0.0-beta",
   "requestFramePermissions": [
     "geolocation"
   ],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
