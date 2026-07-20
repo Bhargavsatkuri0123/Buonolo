@@ -40,6 +40,12 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
       UPLOAD_DIR: /app/uploads
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      AWS_REGION: ${AWS_REGION:-eu-west-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -54,6 +60,30 @@ services:
       retries: 10
       start_period: 20s
 
+  # Gates the QA site behind Microsoft Entra ID SSO; nginx (built from
+  # nginx.qa.conf for this deploy) sends every request through it first.
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    restart: unless-stopped
+    environment:
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: https://login.microsoftonline.com/${AZURE_TENANT_ID:?AZURE_TENANT_ID must be set}/v2.0
+      OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID:?OAUTH2_PROXY_CLIENT_ID must be set}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET:?OAUTH2_PROXY_CLIENT_SECRET must be set}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET:?OAUTH2_PROXY_COOKIE_SECRET must be set}
+      OAUTH2_PROXY_EMAIL_DOMAINS: pearwavetechnologiesltd.com
+      OAUTH2_PROXY_REDIRECT_URL: ${QA_SITE_URL:-http://13.40.179.189}/oauth2/callback
+      OAUTH2_PROXY_COOKIE_SECURE: ${OAUTH2_PROXY_COOKIE_SECURE:-false}
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_UPSTREAMS: static://200
+      OAUTH2_PROXY_SCOPE: "openid email profile"
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4180/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   nginx:
     image: 940127591852.dkr.ecr.eu-west-2.amazonaws.com/buonolo:nginx-${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -63,6 +93,8 @@ services:
       - uploads_data:/usr/share/nginx/uploads:ro
     depends_on:
       backend:
+        condition: service_healthy
+      oauth2-proxy:
         condition: service_healthy
 
 volumes:

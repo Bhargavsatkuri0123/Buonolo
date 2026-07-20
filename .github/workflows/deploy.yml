@@ -55,6 +55,7 @@ jobs:
           IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
         run: |
           docker build -f nginx/Dockerfile \
+                       --build-arg NGINX_CONF_FILE=nginx.qa.conf \
                        -t "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-$IMAGE_TAG" \
                        -t "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-latest" \
                        .

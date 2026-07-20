@@ -6,6 +6,8 @@ function required(name: string): string {
   return value;
 }
 
+const storageBackend = process.env.STORAGE_BACKEND === "s3" ? "s3" : "local";
+
 export const env = {
   port: Number(process.env.PORT ?? 4000),
   nodeEnv: process.env.NODE_ENV ?? "development",
@@ -18,4 +20,10 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   uploadDir: process.env.UPLOAD_DIR ?? "./uploads",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  storageBackend,
+  awsRegion: process.env.AWS_REGION ?? "eu-west-2",
+  awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || undefined,
+  awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || undefined,
+  s3Bucket: storageBackend === "s3" ? required("AWS_S3_BUCKET") : process.env.AWS_S3_BUCKET,
+  s3PublicBaseUrl: storageBackend === "s3" ? required("S3_PUBLIC_BASE_URL") : process.env.S3_PUBLIC_BASE_URL,
 };

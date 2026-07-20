@@ -41,6 +41,12 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
       UPLOAD_DIR: /app/uploads
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      AWS_REGION: ${AWS_REGION:-eu-west-2}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
