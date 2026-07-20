@@ -1,7 +1,76 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { ArrowLeft } from "lucide-react";
 import { LOCATIONS } from "../constants";
 import { Theme } from "../types";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: { client_id: string; callback: (response: { credential: string }) => void }) => void;
+          renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+function loadGoogleIdentityScript(): Promise<void> {
+  if (window.google?.accounts?.id) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById("google-identity-script") as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("Failed to load Google Identity script")));
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "google-identity-script";
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Google Identity script"));
+    document.head.appendChild(script);
+  });
+}
+
+function GoogleSignInButton({ onCredential }: { onCredential: (idToken: string) => void }) {
+  const buttonRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    let cancelled = false;
+    loadGoogleIdentityScript()
+      .then(() => {
+        if (cancelled || !buttonRef.current || !window.google) return;
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response) => onCredential(response.credential),
+        });
+        window.google.accounts.id.renderButton(buttonRef.current, {
+          type: "standard",
+          theme: "outline",
+          size: "large",
+          width: 320,
+          text: "continue_with",
+        });
+      })
+      .catch(() => {
+        // Google's script failed to load (offline, blocked, etc.) — the button
+        // just doesn't render; email sign-in remains available.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [onCredential]);
+
+  if (!GOOGLE_CLIENT_ID) return null;
+  return <div ref={buttonRef} className="flex justify-center" />;
+}
 
 interface AuthFlowProps {
   authScreen: string;
@@ -29,6 +98,7 @@ interface AuthFlowProps {
   authLoading: boolean;
   handleEmailLogin: (e: React.FormEvent) => void;
   handleEmailRegister: (e: React.FormEvent) => void;
+  handleGoogleLogin: (idToken: string) => void;
   handleSetupSave: (
     name: string, 
     origin: string, 
@@ -48,7 +118,7 @@ export const AuthFlow = ({
   authName, setAuthName, authOrigin, setAuthOrigin, authHost, setAuthHost, authCity, setAuthCity,
   authCustomHost, setAuthCustomHost, authCustomCity, setAuthCustomCity,
   authSituation, setAuthSituation, authFocus, setAuthFocus,
-  authLoading, handleEmailLogin, handleEmailRegister, handleSetupSave,
+  authLoading, handleEmailLogin, handleEmailRegister, handleGoogleLogin, handleSetupSave,
   toastError, T
 }: AuthFlowProps) => {
   if (authScreen === "intro") return (
@@ -66,6 +136,7 @@ export const AuthFlow = ({
       <h1 className={`disp font-bold text-3xl ${T.text}`}>Welcome to buonôlô</h1>
       <p className={`mt-2 ${T.sub}`}>Your companion for settling in Germany with confidence.</p>
       <div className="w-full mt-12 space-y-3 max-w-sm">
+        <GoogleSignInButton onCredential={handleGoogleLogin} />
         <button onClick={() => setAuthScreen("login")} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-orange-500/20">
           Continue with Email
         </button>

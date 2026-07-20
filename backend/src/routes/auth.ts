@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { OAuth2Client } from "google-auth-library";
 import { prisma } from "../db.js";
 import { asyncHandler, HttpError } from "../middleware/errorHandler.js";
 import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
@@ -15,8 +16,11 @@ import {
 import { clearRefreshCookie, getRefreshCookie, setRefreshCookie } from "../lib/cookies.js";
 import { generateUniqueHandle } from "../lib/handle.js";
 import { loadProfile } from "../lib/serialize.js";
+import { env } from "../env.js";
 
 export const authRouter = Router();
+
+const googleClient = env.googleClientId ? new OAuth2Client(env.googleClientId) : null;
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -45,6 +49,48 @@ authRouter.post(
   })
 );
 
+const googleSchema = z.object({ idToken: z.string() });
+
+authRouter.post(
+  "/google",
+  asyncHandler(async (req, res) => {
+    if (!googleClient) throw new HttpError(500, "Google sign-in is not configured");
+    const { idToken } = googleSchema.parse(req.body);
+
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({ idToken, audience: env.googleClientId! });
+      payload = ticket.getPayload();
+    } catch {
+      throw new HttpError(401, "Invalid Google credential");
+    }
+    if (!payload?.email || !payload.email_verified) throw new HttpError(401, "Invalid Google credential");
+
+    let user = await prisma.user.findUnique({ where: { googleId: payload.sub } });
+    let isNewUser = false;
+
+    if (!user) {
+      // An existing email/password account with this email links to Google rather than colliding.
+      const existingByEmail = await prisma.user.findUnique({ where: { email: payload.email } });
+      if (existingByEmail) {
+        user = await prisma.user.update({ where: { id: existingByEmail.id }, data: { googleId: payload.sub } });
+      } else {
+        const handle = await generateUniqueHandle(payload.name ?? payload.email);
+        user = await prisma.user.create({
+          data: { email: payload.email, googleId: payload.sub, fullName: payload.name ?? payload.email, handle },
+        });
+        isNewUser = true;
+      }
+    }
+
+    const accessToken = signAccessToken({ sub: user.id, email: user.email });
+    const refreshToken = await issueRefreshToken(user.id);
+    setRefreshCookie(res, refreshToken);
+
+    res.status(isNewUser ? 201 : 200).json({ accessToken, refreshToken, profile: await loadProfile(user.id), isNewUser });
+  })
+);
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -60,7 +106,7 @@ authRouter.post(
     if (!allowed) throw new HttpError(429, "Too many login attempts. Try again later.");
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !(await comparePassword(password, user.passwordHash))) {
+    if (!user || !user.passwordHash || !(await comparePassword(password, user.passwordHash))) {
       throw new HttpError(401, "Invalid email or password");
     }
 

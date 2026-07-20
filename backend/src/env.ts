@@ -26,4 +26,7 @@ export const env = {
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || undefined,
   s3Bucket: storageBackend === "s3" ? required("AWS_S3_BUCKET") : process.env.AWS_S3_BUCKET,
   s3PublicBaseUrl: storageBackend === "s3" ? required("S3_PUBLIC_BASE_URL") : process.env.S3_PUBLIC_BASE_URL,
+  // Optional: unset simply disables the POST /api/auth/google route at runtime rather than
+  // crashing startup, so this feature can be rolled out independently of a full deploy.
+  googleClientId: process.env.GOOGLE_CLIENT_ID || undefined,
 };

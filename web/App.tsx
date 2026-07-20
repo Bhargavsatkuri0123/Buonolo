@@ -316,6 +316,27 @@ export default function BuonoloApp() {
     }
   };
 
+  const handleGoogleLogin = async (idToken: string) => {
+    setAuthLoading(true);
+    setToastError("");
+    try {
+      const data = await api.post<{ accessToken: string; profile: any; isNewUser: boolean }>("/api/auth/google", { idToken });
+      setAccessToken(data.accessToken);
+      if (data.isNewUser) {
+        setAuthName(data.profile.name);
+        setUser({ id: data.profile.id, email: data.profile.email });
+        setProfile(toProfile(data.profile));
+        setAuthScreen("setup");
+      } else {
+        await loadSession({ id: data.profile.id, email: data.profile.email }, data.profile);
+      }
+    } catch (err: any) {
+      setToastError(err instanceof ApiError ? err.message : "Google sign-in failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleSetupSave = async (
     name: string,
     origin: string,
@@ -510,6 +531,7 @@ export default function BuonoloApp() {
           authFocus={authFocus} setAuthFocus={setAuthFocus}
           authLoading={authLoading}
           handleEmailLogin={handleEmailLogin} handleEmailRegister={handleEmailRegister} handleSetupSave={handleSetupSave}
+          handleGoogleLogin={handleGoogleLogin}
           toastError={toastError} T={T}
         />
       ) : (
