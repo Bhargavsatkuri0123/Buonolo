@@ -1,0 +1,35 @@
+name: Buonolo
+options:
+  bundleIdPrefix: com.buonolo
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  Buonolo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Buonolo
+    info:
+      path: Buonolo/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Buonolo
+        UILaunchScreen: {}
+        APIBaseURL: $(BUONOLO_API_BASE_URL)
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.buonolo.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.9"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+      configs:
+        Debug:
+          # Android's emulator alias has no iOS-simulator equivalent; the simulator shares the
+          # Mac's network namespace, so localhost reaches a backend running on the host directly.
+          BUONOLO_API_BASE_URL: "http://localhost:4000"
+        Release:
+          BUONOLO_API_BASE_URL: "https://your-domain.example.com"

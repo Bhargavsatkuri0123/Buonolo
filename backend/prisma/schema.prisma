@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Privacy {
+  PUBLIC
+  FRIENDS
+  PRIVATE
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model User {
+  id                    String   @id @default(uuid())
+  email                 String   @unique
+  passwordHash          String
+  fullName              String
+  handle                String   @unique
+  origin                String?
+  host                  String?
+  city                  String?
+  bio                   String   @default("")
+  notificationsEnabled  Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  posts            Post[]
+  reactions        PostReaction[]
+  comments         Comment[]
+  saves            PostSave[]
+  shares           PostShare[]
+  tagsReceived     PostTag[]         @relation("TaggedUser")
+  following        Follow[]          @relation("Follower")
+  followers        Follow[]          @relation("Following")
+  blocking         BlockedUser[]     @relation("Blocker")
+  blockedBy        BlockedUser[]     @relation("Blocked")
+  groupsAdmin      Group[]
+  groupMemberships GroupMember[]
+  groupUpdates     GroupUpdate[]
+  invitesSent      GroupInvite[]     @relation("Inviter")
+  invitesReceived  GroupInvite[]     @relation("Invitee")
+  eventsCreated    Event[]
+  eventAttendances EventAttendee[]
+  goals            Goal[]
+  messagesSent     Message[]         @relation("Sender")
+  messagesReceived Message[]         @relation("Receiver")
+  notifications    Notification[]
+}
+
+model Post {
+  id         String   @id @default(uuid())
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content    String
+  attachment String?
+  bgTheme    String?
+  feeling    String?
+  location   String?
+  privacy    Privacy  @default(PUBLIC)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reactions PostReaction[]
+  comments  Comment[]
+  saves     PostSave[]
+  shares    PostShare[]
+  tags      PostTag[]
+
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model PostReaction {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String   @default("👍")
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+}
+
+model PostSave {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+}
+
+model PostShare {
+  id                   String   @id @default(uuid())
+  postId               String
+  post                 Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedToReceiverId   String?
+  createdAt            DateTime @default(now())
+}
+
+model PostTag {
+  id            String   @id @default(uuid())
+  postId        String
+  post          Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  taggedUserId  String
+  taggedUser    User     @relation("TaggedUser", fields: [taggedUserId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@unique([postId, taggedUserId])
+}
+
+model Follow {
+  followerId  String
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@id([followerId, followingId])
+}
+
+model BlockedUser {
+  blockerId String
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  category    String?
+  emoji       String   @default("🏘️")
+  adminId     String
+  admin       User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  members GroupMember[]
+  updates GroupUpdate[]
+  invites GroupInvite[]
+}
+
+model GroupMember {
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  @@id([groupId, userId])
+}
+
+model GroupUpdate {
+  id        String   @id @default(uuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([groupId])
+}
+
+model GroupInvite {
+  id         String       @id @default(uuid())
+  groupId    String
+  group      Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviterId  String
+  inviter    User         @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  inviteeId  String
+  invitee    User         @relation("Invitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  status     InviteStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+
+  @@unique([groupId, inviteeId])
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  image       String   @default("📅")
+  date        DateTime
+  location    String
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  attendees EventAttendee[]
+}
+
+model EventAttendee {
+  eventId  String
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@id([eventId, userId])
+}
+
+model Goal {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  category  String
+  iconName  String   @default("Target")
+  createdAt DateTime @default(now())
+
+  steps GoalStep[]
+
+  @@index([userId])
+}
+
+model GoalStep {
+  id          String   @id @default(uuid())
+  goalId      String
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  text        String
+  description String   @default("")
+  tool        String   @default("")
+  done        Boolean  @default(false)
+  links       Json     @default("[]")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([goalId])
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User     @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, senderId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// Seeded reference content — replaces the old hardcoded TEMPLATE_HOST_INFO() JS template.
+model HostInfo {
+  id             String   @id @default(uuid())
+  host           String
+  city           String?
+  welcomeMessage String
+  emergency      Json     @default("[]")
+  news           Json     @default("[]")
+  communities    Json     @default("[]")
+  toolSections   Json     @default("[]")
+  updatedAt      DateTime @updatedAt
+
+  @@unique([host, city])
+}
+
+model GoalTemplate {
+  id       String @id @default(uuid())
+  title    String
+  category String
+  iconName String
+  weeks    String
+  steps    Json   @default("[]")
+}
