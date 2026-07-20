@@ -79,11 +79,9 @@ services:
       OAUTH2_PROXY_UPSTREAMS: static://200
       OAUTH2_PROXY_SCOPE: "openid email profile"
       OAUTH2_PROXY_REVERSE_PROXY: "true"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4180/ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+    # No healthcheck: the official image ships no shell/wget/curl to run one
+    # with, so nginx below only waits for this container to start, not for a
+    # (currently impossible) health check to pass.
 
   nginx:
     image: 940127591852.dkr.ecr.eu-west-2.amazonaws.com/buonolo:nginx-${IMAGE_TAG:-latest}
@@ -96,7 +94,7 @@ services:
       backend:
         condition: service_healthy
       oauth2-proxy:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   postgres_data:
