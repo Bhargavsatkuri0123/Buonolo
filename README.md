@@ -11,7 +11,9 @@ A relocation/immigration companion app: a social feed, a guided settlement roadm
   /android  Kotlin + Jetpack Compose
   /ios      SwiftUI
 /nginx      Reverse proxy + static frontend hosting
-docker-compose.yml   postgres, redis, backend, nginx
+docker-compose.yml            postgres, redis, backend, nginx (shared base config)
+docker-compose.override.yml   local dev: builds backend/nginx from source (auto-loaded by `docker compose`)
+docker-compose.prod.yml       deploy: pulls backend/nginx images from ECR, adds oauth2-proxy SSO gate
 ```
 
 The backend owns all data (Postgres via Prisma) and caching/pub-sub (Redis), exposes a REST API under `/api` plus a WebSocket gateway at `/ws` for realtime notifications/messages/posts, and calls the Gemini API server-side for the "Mr O" assistant. Nginx is the single entry point: it serves the built web frontend and reverse-proxies `/api` and `/ws` to the backend, so the browser only ever talks to one origin.

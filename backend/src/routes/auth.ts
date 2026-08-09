@@ -7,13 +7,12 @@ import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { hashPassword, comparePassword } from "../lib/password.js";
 import {
   clearLoginAttempts,
-  issueRefreshToken,
+  issueSession,
   registerLoginAttempt,
   revokeRefreshToken,
-  signAccessToken,
   verifyRefreshToken,
 } from "../lib/tokens.js";
-import { clearRefreshCookie, getRefreshCookie, setRefreshCookie } from "../lib/cookies.js";
+import { clearRefreshCookie, getRefreshCookie } from "../lib/cookies.js";
 import { generateUniqueHandle } from "../lib/handle.js";
 import { loadProfile } from "../lib/serialize.js";
 import { env } from "../env.js";
@@ -41,9 +40,7 @@ authRouter.post(
       data: { email, passwordHash, fullName, handle },
     });
 
-    const accessToken = signAccessToken({ sub: user.id, email: user.email });
-    const refreshToken = await issueRefreshToken(user.id);
-    setRefreshCookie(res, refreshToken);
+    const { accessToken, refreshToken } = await issueSession(res, user);
 
     res.status(201).json({ accessToken, refreshToken, profile: await loadProfile(user.id) });
   })
@@ -83,9 +80,7 @@ authRouter.post(
       }
     }
 
-    const accessToken = signAccessToken({ sub: user.id, email: user.email });
-    const refreshToken = await issueRefreshToken(user.id);
-    setRefreshCookie(res, refreshToken);
+    const { accessToken, refreshToken } = await issueSession(res, user);
 
     res.status(isNewUser ? 201 : 200).json({ accessToken, refreshToken, profile: await loadProfile(user.id), isNewUser });
   })
@@ -112,9 +107,7 @@ authRouter.post(
 
     await clearLoginAttempts(attemptKey);
 
-    const accessToken = signAccessToken({ sub: user.id, email: user.email });
-    const refreshToken = await issueRefreshToken(user.id);
-    setRefreshCookie(res, refreshToken);
+    const { accessToken, refreshToken } = await issueSession(res, user);
 
     res.json({ accessToken, refreshToken, profile: await loadProfile(user.id) });
   })
@@ -143,9 +136,7 @@ authRouter.post(
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new HttpError(401, "User no longer exists");
 
-    const accessToken = signAccessToken({ sub: user.id, email: user.email });
-    const newRefreshToken = await issueRefreshToken(user.id);
-    setRefreshCookie(res, newRefreshToken);
+    const { accessToken, refreshToken: newRefreshToken } = await issueSession(res, user);
 
     res.json({ accessToken, refreshToken: newRefreshToken });
   })

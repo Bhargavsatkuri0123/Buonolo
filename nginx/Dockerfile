@@ -14,6 +14,7 @@ FROM nginx:1.27-alpine
 # Microsoft Entra ID auth_request gate in front of the whole site.
 ARG NGINX_CONF_FILE=nginx.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx/common/ /etc/nginx/common/
 COPY nginx/${NGINX_CONF_FILE} /etc/nginx/nginx.conf
 
 EXPOSE 80
