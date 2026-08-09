@@ -71,13 +71,13 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Upload docker-compose.prod.yml
+      - name: Upload docker-compose files
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ env.DEPLOY_HOST }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: docker-compose.prod.yml
+          source: docker-compose.yml,docker-compose.prod.yml
           target: ${{ env.DEPLOY_PATH }}
           strip_components: 0
 
@@ -90,10 +90,9 @@ jobs:
           script: |
             set -euo pipefail
             cd ${{ env.DEPLOY_PATH }}
-            mv docker-compose.prod.yml docker-compose.yml
             aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
               docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
             export IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}
-            docker compose pull backend nginx
-            docker compose up -d
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend nginx
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
             docker image prune -f

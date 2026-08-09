@@ -1,7 +1,9 @@
+import type { Response } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuid } from "uuid";
 import { env } from "../env.js";
 import { redis } from "../redis.js";
+import { setRefreshCookie } from "./cookies.js";
 
 export interface AccessTokenPayload {
   sub: string;
@@ -10,6 +12,18 @@ export interface AccessTokenPayload {
 
 export function signAccessToken(payload: AccessTokenPayload): string {
   return jwt.sign(payload, env.jwtAccessSecret, { expiresIn: env.accessTokenTtl as jwt.SignOptions["expiresIn"] });
+}
+
+// Signs an access token, issues a refresh token, and sets the refresh cookie —
+// the triplet every login/register/refresh path needs together.
+export async function issueSession(
+  res: Response,
+  user: { id: string; email: string }
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const accessToken = signAccessToken({ sub: user.id, email: user.email });
+  const refreshToken = await issueRefreshToken(user.id);
+  setRefreshCookie(res, refreshToken);
+  return { accessToken, refreshToken };
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
