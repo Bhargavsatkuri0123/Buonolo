@@ -1,0 +1,138 @@
+export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user, onRSVP }: any) => {
+  const [joined, setJoined] = useState(selectedEvent.joined);
+  const [attendees, setAttendees] = useState(selectedEvent.attendees || 0);
+  const [isRsvping, setIsRsvping] = useState(false);
+
+  const handleRSVP = async () => {
+    if (!user || isRsvping) return;
+    setIsRsvping(true);
+    if (joined) {
+      const { error } = await supabase.from("event_attendees").delete().eq("event_id", selectedEvent.id).eq("user_id", user.id);
+      if (!error) {
+        setJoined(false);
+        const newAttendees = Math.max(0, attendees - 1);
+        setAttendees(newAttendees);
+        await supabase.from("events").update({ attendees: newAttendees }).eq("id", selectedEvent.id);
+        onRSVP && onRSVP(selectedEvent.id, false);
+      }
+    } else {
+      const { error } = await supabase.from("event_attendees").insert({ 
+        event_id: selectedEvent.id, 
+        user_id: user.id, 
+        user_name: user.user_metadata?.full_name || "User" 
+      });
+      if (!error) {
+        setJoined(true);
+        const newAttendees = attendees + 1;
+        setAttendees(newAttendees);
+        await supabase.from("events").update({ attendees: newAttendees }).eq("id", selectedEvent.id);
+        onRSVP && onRSVP(selectedEvent.id, true);
+      }
+    }
+    setIsRsvping(false);
+  };
+
+  return (
+    <div className="pb-24 bg-white dark:bg-black min-h-screen">
+      <div className={`sticky top-0 z-10 flex items-center justify-between p-4 bg-white/80 dark:bg-black/80 backdrop-blur-md`}>
+        <button onClick={onClose} className={`p-2 -ml-2 rounded-full ${T.card}`}>
+          <ChevronLeft size={20} className={T.text} />
+        </button>
+        <button 
+          onClick={async () => {
+            try {
+              if (navigator.share) {
+                await navigator.share({
+                  title: selectedEvent.title,
+                  text: `Check out this event: ${selectedEvent.title} on Buonolo!`,
+                  url: window.location.href
+                });
+              } else {
+                navigator.clipboard.writeText(window.location.href);
+                alert("Link copied to clipboard!");
+              }
+            } catch (err: any) {
+              if (err.name !== 'AbortError') console.error('Error sharing:', err);
+            }
+          }}
+          className={`p-2 -mr-2 rounded-full ${T.card}`}
+        >
+          <Share size={20} className={T.text} />
+        </button>
+      </div>
+      
+      <div className="w-full h-56 bg-orange-100 dark:bg-zinc-900 flex flex-col items-center justify-center">
+        <div className="text-6xl drop-shadow-md mb-2">{selectedEvent.image}</div>
+      </div>
+      
+      <div className="p-4 space-y-6 cardin -mt-4 relative z-10 bg-white dark:bg-black rounded-t-2xl">
+        <div>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className={`text-sm font-bold text-orange-600 mb-1 flex items-center gap-1.5`}><Calendar size={14} /> {selectedEvent.date}</p>
+              <h2 className={`text-2xl font-bold ${T.text} leading-tight mb-3`}>{selectedEvent.title}</h2>
+            </div>
+          </div>
+          <div className={`flex flex-col gap-3 p-4 rounded-xl ${T.card} border border-orange-100 dark:border-zinc-800`}>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+                <MapPin size={16} className="text-orange-600" />
+              </div>
+              <div>
+                <p className={`text-sm font-bold ${T.text}`}>{selectedEvent.location}</p>
+                <p className={`text-xs ${T.sub}`}>Show on map</p>
+              </div>
+            </div>
+            <div className="w-full h-[1px] bg-orange-100 dark:bg-zinc-800" />
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+                <Users size={16} className="text-orange-600" />
+              </div>
+              <div>
+                <p className={`text-sm font-bold ${T.text}`}>{selectedEvent.attendees} attendees</p>
+                <p className={`text-xs ${T.sub}`}>+15 spots left</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex gap-3">
+          <button className={`flex-1 py-3.5 rounded-xl bg-orange-500 text-white font-bold text-center flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30`}>
+            <CheckCircle2 size={18} /> RSVP Going
+          </button>
+          <button className={`px-6 py-3.5 rounded-xl ${T.card} ${T.text} font-bold text-center border border-orange-200 dark:border-zinc-800`}>
+            Maybe
+          </button>
+        </div>
+
+        <div>
+          <p className={`text-xs font-bold uppercase tracking-wider ${T.sub} mb-3`}>About this event</p>
+          <p className={`text-sm ${T.text} leading-relaxed`}>
+            Join us for a wonderful time! This is a great opportunity to meet new people and share experiences. Don't forget to bring your enthusiasm and good vibes. Look out for the group with the orange balloon.
+          </p>
+        </div>
+
+        <div>
+           <div className="flex items-center justify-between mb-3">
+            <p className={`text-xs font-bold uppercase tracking-wider ${T.sub}`}>Attendees</p>
+            <button className="text-xs font-semibold text-orange-600">See all {selectedEvent.attendees}</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex -space-x-3">
+              {DUMMY_PEOPLE.map((p, i) => (
+                <div key={p.id} className="w-10 h-10 rounded-full border-2 border-white dark:border-black overflow-hidden relative z-10" style={{ zIndex: 10 - i }} onClick={() => onUserClick(p)}>
+                  <Avatar name={p.name} />
+                </div>
+              ))}
+            </div>
+            <div className={`w-10 h-10 rounded-full border-2 border-white dark:border-black ${T.card2} flex items-center justify-center text-[10px] font-bold ${T.text} -ml-3 relative`} style={{ zIndex: 0 }}>
+              +{selectedEvent.attendees - 3}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const GroupView = ({ group, onClose, T, onUserClick, onEventClick, onInviteClick, user }: any) => {
