@@ -16,9 +16,10 @@ interface CommunityTabProps {
   user: any;
   T: Theme;
   onRefreshGroups: () => void;
+  onStartChat?: (id: string) => void;
 }
 
-export const UserView = ({ user, onClose, T, onGroupClick, groups }: any) => {
+export const UserView = ({ user, onClose, T, onGroupClick, groups, onStartChat }: any) => {
   return (
     <div className="pb-24 bg-white dark:bg-black min-h-screen">
       <div className={`sticky top-0 z-10 flex items-center justify-between p-4 border-b border-orange-100 dark:border-zinc-800 bg-white dark:bg-black`}>
@@ -55,7 +56,7 @@ export const UserView = ({ user, onClose, T, onGroupClick, groups }: any) => {
         <p className={`text-sm ${T.sub} mt-1 flex items-center gap-1`}><Globe size={14} /> from {user.origin}</p>
         
         <div className="flex gap-3 mt-6 w-full max-w-xs">
-          <button className="flex-1 py-2.5 rounded-full bg-orange-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/20">
+          <button onClick={() => onStartChat?.(user.id)} className="flex-1 py-2.5 rounded-full bg-orange-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/20">
             <MessageCircle size={18} /> Message
           </button>
           <button className={`flex-1 py-2.5 rounded-full ${T.card} ${T.text} font-bold text-sm border border-orange-200 dark:border-zinc-800`}>
@@ -649,7 +650,7 @@ export const GroupView = ({ group, onClose, T, onUserClick, onEventClick, onInvi
 };
 
 
-export const CommunityTab = ({ communitiesData, activeCommunityTab, setActiveCommunityTab, profile, user, T, onRefreshGroups }: CommunityTabProps) => {
+export const CommunityTab = ({ communitiesData, activeCommunityTab, setActiveCommunityTab, profile, user, T, onRefreshGroups, onStartChat }: CommunityTabProps) => {
   const [data, setData] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>(DUMMY_EVENTS);
   const [people, setPeople] = useState<any[]>(DUMMY_PEOPLE);
@@ -906,7 +907,7 @@ export const CommunityTab = ({ communitiesData, activeCommunityTab, setActiveCom
   };
 
   if (selectedUser) {
-    return <UserView user={selectedUser} onClose={() => setSelectedUser(null)} T={T} onGroupClick={setSelectedGroup} groups={data} />;
+    return <UserView user={selectedUser} onClose={() => setSelectedUser(null)} T={T} onGroupClick={setSelectedGroup} groups={data} onStartChat={onStartChat} />;
   }
 
   if (selectedGroup) {

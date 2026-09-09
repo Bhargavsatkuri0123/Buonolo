@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { ArrowLeft, ImageIcon, Users as UsersIcon, Smile, MapPin, X, Globe, Lock, ChevronDown, Check, MoreHorizontal, Search } from "lucide-react";
 import { supabase } from "../../supabase";
 import { Avatar } from "./Avatar";
@@ -26,6 +26,29 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
   const [activeMenu, setActiveMenu] = useState<"feeling" | "location" | "tag" | "settings" | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dynamicFriends, setDynamicFriends] = useState<string[]>([]);
+  const [dynamicLocations, setDynamicLocations] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isOpen && user) {
+      const fetchMetadata = async () => {
+        const { data: profiles } = await supabase.from('profiles').select('full_name, city, host').neq('id', user.id);
+        if (profiles) {
+          const names = Array.from(new Set(profiles.map(p => p.full_name).filter(Boolean))) as string[];
+          setDynamicFriends(names);
+
+          const locs = Array.from(new Set(profiles.map(p => {
+            if (p.city && p.host) return `${p.city}, ${p.host}`;
+            if (p.city) return p.city;
+            if (p.host) return p.host;
+            return null;
+          }).filter(Boolean))) as string[];
+          setDynamicLocations(locs);
+        }
+      };
+      fetchMetadata();
+    }
+  }, [isOpen, user]);
   
   if (!isOpen) return null;
   
@@ -94,9 +117,9 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
     }
   };
 
-  const friendsList = ["Alex", "Sam", "Maria", "David", "Jessica"];
+  const friendsList = dynamicFriends.length > 0 ? dynamicFriends : ["Alex", "Sam", "Maria", "David", "Jessica"];
   const feelingsList = ["happy 😊", "sad 😢", "good 👍", "bad 👎", "excited 🤩", "blessed 🙏", "loved ❤️"];
-  const locationList = ["Berlin, Germany", "New York, USA", "London, UK", "Paris, France", "Tokyo, Japan"];
+  const locationList = dynamicLocations.length > 0 ? dynamicLocations : ["Berlin, Germany", "New York, USA", "London, UK", "Paris, France", "Tokyo, Japan"];
   const backgrounds = ["", "bg-red-500", "bg-blue-500", "bg-orange-500", "bg-green-500", "bg-purple-500", "bg-gradient-to-r from-cyan-500 to-blue-500", "bg-gradient-to-r from-fuchsia-500 to-pink-500"];
 
   if (activeMenu) {

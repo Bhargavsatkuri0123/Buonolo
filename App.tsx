@@ -66,10 +66,7 @@ export default function BuonoloApp() {
   const [messengerOpen, setMessengerOpen] = useState(false);
   const [activeMessageThread, setActiveMessageThread] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
-  const [directMessages, setDirectMessages] = useState<any[]>([
-    { id: "msg1", threadId: "Alex", sender: "Alex", text: "Hey! How are you settling in?", time: "10:00 AM", isMe: false },
-    { id: "msg2", threadId: "Alex", sender: "Me", text: "Getting there! Found a nice apartment.", time: "10:05 AM", isMe: true }
-  ]);
+  const [directMessages, setDirectMessages] = useState<any[]>([]);
   const [botMessages, setBotMessages] = useState<any[]>([
     { id: "b1", sender: "Mr O", text: "Hello! I am Mr O, your immigration assistant. Ask me anything!", time: "Now", isMe: false }
   ]);
@@ -130,6 +127,88 @@ export default function BuonoloApp() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
+
+  const fetchMessages = async () => {
+    if (!user) return;
+    
+    // 1. Fetch chat rooms for user
+    const { data: rooms, error: roomsError } = await supabase
+      .from('chat_rooms')
+      .select('id, participants')
+      .contains('participants', [user.id]);
+      
+    if (roomsError || !rooms) return;
+    
+    const roomIds = rooms.map(r => r.id);
+    if (roomIds.length === 0) {
+      setDirectMessages([]);
+      return;
+    }
+    
+    // 2. Fetch messages for these rooms
+    const { data: messages, error: msgsError } = await supabase
+      .from('messages')
+      .select('*')
+      .in('chat_room_id', roomIds)
+      .order('created_at', { ascending: true });
+      
+    if (msgsError || !messages) return;
+    
+    // 3. Resolve other user profiles
+    const otherUserIds = new Set<string>();
+    rooms.forEach(r => {
+      r.participants.forEach((p: string) => {
+        if (p !== user.id) otherUserIds.add(p);
+      });
+    });
+    
+    let profilesMap: Record<string, string> = {};
+    if (otherUserIds.size > 0) {
+      const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', Array.from(otherUserIds));
+      if (profiles) {
+        profiles.forEach(p => profilesMap[p.id] = p.full_name || "Unknown");
+      }
+    }
+    
+    // 4. Format messages
+    const formatted = messages.map(m => {
+      const room = rooms.find(r => r.id === m.chat_room_id);
+      const otherUserId = room?.participants.find((p: string) => p !== user.id) || "unknown";
+      const isMe = m.sender_id === user.id;
+      const threadName = profilesMap[otherUserId] || "Unknown User";
+      
+      return {
+        id: m.id,
+        threadId: otherUserId, // We use otherUserId as threadId to keep UI consistent
+        threadName: threadName,
+        sender: isMe ? "Me" : threadName,
+        text: m.text,
+        time: new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        isMe: isMe,
+        sharedPost: null
+      };
+    });
+    
+    setDirectMessages(formatted);
+  };
+
+  useEffect(() => {
+    if (user) fetchMessages();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase.channel('realtime_messages')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+        const m = payload.new as any;
+        if (m && (m.sender_id === user.id || m.receiver_id === user.id)) {
+          fetchMessages(); 
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
   const [showNotifs, setShowNotifs] = useState(false);
 
   const pushNotification = (title: string, body: string, type: string = "system") => {
@@ -139,7 +218,23 @@ export default function BuonoloApp() {
   const fetchHostInfo = async (origin: string, newHost: string, newCity: string) => {
     setIsUpdatingHost(true);
     try {
-      const data = TEMPLATE_HOST_INFO(origin, newCity, newHost);
+      const fallbackData = TEMPLATE_HOST_INFO(origin, newCity, newHost);
+      let data = fallbackData;
+      
+      try {
+        const response = await fetch('/api/host-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ origin, city: newCity, host: newHost })
+        });
+        if (response.ok) {
+          const apiData = await response.json();
+          // Merge API data with fallback data (to keep toolSections and goals)
+          data = { ...fallbackData, ...apiData };
+        }
+      } catch (e) {
+        console.error("Failed to fetch host info from API, using fallback", e);
+      }
       
       if (data.welcomeMessage) setWelcomeMessage(data.welcomeMessage);
       if (data.emergency) setEmergencyData(data.emergency);
@@ -481,25 +576,87 @@ export default function BuonoloApp() {
   };
 
   const handleShareToMessenger = (post: Post) => {
-    setDirectMessages(msgs => [...msgs, { id: "msg" + Date.now(), threadId: "Alex", sender: "Me", text: `Check out this post!`, time: "Just now", isMe: true, sharedPost: post }]);
+    // Just open the messenger and pre-fill the text
+    setMessageText(`Check out this post: ${post.text.substring(0, 50)}...`);
     setMessengerOpen(true);
-    setActiveMessageThread("Alex");
+    setActiveMessageThread(null);
   };
 
-  const handleSendMessage = () => {
-    if (!messageText.trim() || !activeMessageThread) return;
-    setDirectMessages(msgs => [...msgs, { id: "msg" + Date.now(), threadId: activeMessageThread, sender: "Me", text: messageText, time: "Just now", isMe: true }]);
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !activeMessageThread || !user) return;
+    const msgText = messageText;
     setMessageText("");
+    
+    const otherUserId = activeMessageThread;
+    
+    // Check if room exists
+    let { data: rooms } = await supabase
+      .from('chat_rooms')
+      .select('id, participants')
+      .contains('participants', [user.id]);
+      
+    let roomId = rooms?.find(r => r.participants.includes(otherUserId))?.id;
+    
+    if (!roomId) {
+      // Create room
+      const { data: newRoom, error: createError } = await supabase
+        .from('chat_rooms')
+        .insert({ participants: [user.id, otherUserId] })
+        .select()
+        .single();
+        
+      if (createError) {
+        console.error("Failed to create chat room", createError);
+        return;
+      }
+      roomId = newRoom.id;
+    }
+    
+    // Insert message
+    const { error } = await supabase.from('messages').insert({
+      sender_id: user.id,
+      chat_room_id: roomId,
+      text: msgText
+    });
+    
+    if (error) {
+      console.error("Failed to send message", error);
+      // Fallback UI update or toast
+    }
   };
 
   const handleBotMessage = async (text: string) => {
     if (!text.trim()) return;
-    setBotMessages(prev => [...prev, { id: "bm-" + Date.now(), sender: "Me", text, time: "Just now", isMe: true }]);
+    
+    const newMessage = { id: "bm-" + Date.now(), sender: "Me", text, time: "Just now", isMe: true };
+    const currentMessages = [...botMessages, newMessage];
+    
+    setBotMessages(currentMessages);
     setBotLoading(true);
-    setTimeout(() => {
-      setBotMessages(prev => [...prev, { id: "br-" + Date.now(), sender: "Mr O", text: "I am a templated assistant. For specific help, please check the community or tools tabs.", time: "Now", isMe: false }]);
+    
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: currentMessages.filter(m => m.id !== "b1"), // don't send the first hardcoded message as it doesn't fit standard pattern easily or just send it if we want
+          userOrigin: profile?.origin,
+          userHost: profile?.host,
+          userCity: profile?.city
+        })
+      });
+
+      if (!response.ok) throw new Error("Network response was not ok");
+      
+      const data = await response.json();
+      
+      setBotMessages(prev => [...prev, { id: "br-" + Date.now(), sender: "Mr O", text: data.text, time: "Now", isMe: false }]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      setBotMessages(prev => [...prev, { id: "br-" + Date.now(), sender: "Mr O", text: "Sorry, I am having trouble connecting to the server.", time: "Now", isMe: false }]);
+    } finally {
       setBotLoading(false);
-    }, 1000);
+    }
   };
 
   const NAV = [["home", Home, "Home"], ["roadmap", Map, "Roadmap"], ["community", Users, "Community"], ["tools", Wrench, "Tools"], ["me", User, "Me"]];
@@ -554,6 +711,17 @@ export default function BuonoloApp() {
               user={user}
               T={T} 
               onRefreshGroups={fetchGroups}
+              onStartChat={async (id) => {
+                setActiveMessageThread(id);
+                setMessengerOpen(true);
+                const { data } = await supabase.from('profiles').select('full_name').eq('id', id).single();
+                if (data && data.full_name) {
+                  setDirectMessages(prev => {
+                    if (prev.some(m => m.threadId === id)) return prev;
+                    return [...prev, { id: 'temp-' + id, threadId: id, threadName: data.full_name, isFake: true, text: '' }];
+                  });
+                }
+              }}
             />
           )}
           {tab === "tools" && <ToolsTab openTool={openTool} setOpenTool={setOpenTool} toolSectionsData={toolSectionsData} profile={profile!} emergencyData={emergencyData} T={T} setGoals={setGoals} setTab={setTab} user={user} />}
