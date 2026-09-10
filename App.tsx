@@ -42,7 +42,7 @@ export default function BuonoloApp() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [emergencyData, setEmergencyData] = useState<any[]>([]);
-  const [newsData, setNewsData] = useState<any[]>([]);
+  const [newsData, setNewsData] = useState<any[]>(() => TEMPLATE_HOST_INFO("USA", "Berlin", "Germany").news);
   const [communitiesData, setCommunitiesData] = useState<any[]>([]);
   const [toolSectionsData, setToolSectionsData] = useState<any[]>([]);
   const [welcomeMessage, setWelcomeMessage] = useState("");
@@ -88,12 +88,12 @@ export default function BuonoloApp() {
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
 
   const T: Theme = useMemo(() => ({
-    bg: dark ? "bg-slate-950" : "bg-orange-50",
+    bg: dark ? "bg-slate-950" : "bg-white",
     card: dark ? "bg-slate-900" : "bg-white",
-    card2: dark ? "bg-slate-800" : "bg-orange-100",
+    card2: dark ? "bg-slate-800" : "bg-slate-50",
     text: dark ? "text-slate-50" : "text-slate-900",
     sub: dark ? "text-slate-400" : "text-slate-500",
-    line: dark ? "border-slate-800" : "border-orange-100",
+    line: dark ? "border-slate-800" : "border-slate-100",
     input: dark ? "bg-slate-800 text-slate-100 placeholder-slate-500" : "bg-white text-slate-900 placeholder-slate-400",
   }), [dark]);
 
@@ -320,7 +320,7 @@ export default function BuonoloApp() {
         
         return {
           id: p.id,
-          name: p.author_name,
+          name: p.author_name || "Community Member",
           author_id: p.author_id,
           text: p.content,
           time: new Date(p.created_at).toLocaleDateString(),
@@ -336,21 +336,87 @@ export default function BuonoloApp() {
           following: followingIds.includes(p.author_id)
         };
       });
-      const dummyPosts = GENERATE_DUMMY_FEED(o, c, h);
-      setFeed([...dummyPosts, ...mappedPosts]);
+
+      if (mappedPosts.length > 0) {
+        setFeed(mappedPosts);
+      } else {
+        const dummyPosts = GENERATE_DUMMY_FEED(o, c, h);
+        setFeed(dummyPosts);
+      }
     }
   };
 
   const fetchGoals = async (userId: string) => {
-    const { data, error } = await supabase.from("user_goals").select("*").eq("user_id", userId);
-    if (!error && data) {
-      setGoals(data.map((g: any) => ({
-        id: g.id,
-        title: g.title,
-        cat: g.category,
-        icon: Target,
-        steps: g.steps
-      })));
+    const { data, error } = await supabase
+      .from("goals")
+      .select("*, tasks(*)")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      setGoals(data.map((g: any) => {
+        const steps = (g.tasks || []).map((t: any) => {
+          try {
+            const parsed = JSON.parse(t.title);
+            return {
+              id: t.id,
+              t: parsed.t || t.title,
+              d: parsed.d || "",
+              done: !!parsed.done,
+              tool: parsed.tool || "Tasks"
+            };
+          } catch {
+            return {
+              id: t.id,
+              t: t.title,
+              d: "",
+              done: false,
+              tool: "Tasks"
+            };
+          }
+        });
+        return {
+          id: g.id,
+          title: g.title,
+          cat: g.category || "General",
+          icon: Target,
+          steps: steps.length > 0 ? steps : [
+            { t: "Get started", d: "First step on your journey.", done: false, tool: "Tasks" }
+          ]
+        };
+      }));
+    } else {
+      // Create initial goal in database for user
+      const { data: newGoal } = await supabase.from("goals").insert({
+        user_id: userId,
+        title: "Settle into your new city",
+        category: "Documentation"
+      }).select().single();
+
+      if (newGoal) {
+        await supabase.from("tasks").insert([
+          { goal_id: newGoal.id, title: JSON.stringify({ t: "City Registration (Anmeldung)", d: "Book an appointment at the local Bürgeramt.", done: false, tool: "Registration" }) },
+          { goal_id: newGoal.id, title: JSON.stringify({ t: "Open a Local Bank Account", d: "Prepare passport and proof of residence.", done: false, tool: "Banking" }) },
+          { goal_id: newGoal.id, title: JSON.stringify({ t: "Health Insurance Setup", d: "Confirm your statutory or private coverage certificate.", done: false, tool: "Insurance" }) }
+        ]);
+        const { data: freshGoals } = await supabase.from("goals").select("*, tasks(*)").eq("user_id", userId);
+        if (freshGoals) {
+          setGoals(freshGoals.map((g: any) => ({
+            id: g.id,
+            title: g.title,
+            cat: g.category,
+            icon: Target,
+            steps: (g.tasks || []).map((t: any) => {
+              try {
+                const parsed = JSON.parse(t.title);
+                return { id: t.id, t: parsed.t, d: parsed.d, done: !!parsed.done, tool: parsed.tool || "Tasks" };
+              } catch {
+                return { id: t.id, t: t.title, d: "", done: false, tool: "Tasks" };
+              }
+            })
+          })));
+        }
+      }
     }
   };
 
@@ -361,7 +427,7 @@ export default function BuonoloApp() {
         id: g.id,
         name: g.name,
         desc: g.description,
-        emoji: "🏘️", // Or from DB if stored
+        emoji: g.image || (g.category === "Social" ? "🌍" : g.category === "Housing" ? "🏠" : g.category === "Professional" ? "💼" : "🏘️"),
         members: g.group_members?.length || 0,
         joined: g.group_members?.some((m: any) => m.user_id === user?.id)
       })));
@@ -371,8 +437,7 @@ export default function BuonoloApp() {
   const fetchEvents = async (origin?: string, city?: string, host?: string) => {
     const { data, error } = await supabase.from("events").select("*");
     if (!error && data) {
-      // Update global events state if we had one, or just pass to CommunityTab
-      // For now we'll just handle it in CommunityTab if we want live events
+      // Live events handled in CommunityTab
     }
   };
 
@@ -390,12 +455,27 @@ export default function BuonoloApp() {
 
   useEffect(() => {
     if (!user) return;
-    const channel = supabase.channel('realtime_posts')
+    const channel = supabase.channel(`realtime_app_${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+        fetchFeed();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => {
         fetchFeed();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, () => {
         fetchGroups();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, () => {
+        fetchGroups();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'goals', filter: `user_id=eq.${user.id}` }, () => {
+        fetchGoals(user.id);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        fetchGoals(user.id);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => {
+        handleUserChange(user);
       })
       .subscribe();
 
@@ -403,6 +483,141 @@ export default function BuonoloApp() {
       supabase.removeChannel(channel);
     };
   }, [user]);
+
+  const handleToggleStep = async (goalId: string, stepIndex: number) => {
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    const targetStep = goal.steps[stepIndex];
+    if (!targetStep) return;
+
+    const newDone = !targetStep.done;
+
+    // Optimistic UI update
+    setGoals(gs => gs.map(g => g.id !== goalId ? g : {
+      ...g,
+      steps: g.steps.map((s, idx) => idx === stepIndex ? { ...s, done: newDone } : s)
+    }));
+
+    if (user && (targetStep as any).id) {
+      await supabase.from("tasks").update({
+        title: JSON.stringify({
+          t: targetStep.t,
+          d: targetStep.d,
+          done: newDone,
+          tool: targetStep.tool
+        })
+      }).eq("id", (targetStep as any).id);
+    }
+  };
+
+  const handleAddGoal = async (tpl: any) => {
+    setShowTemplates(false);
+    const initialSteps = [
+      { t: "Understand the requirements", d: "Open the linked tool to see the full checklist for your situation and nationality.", done: false, tool: "Registration" },
+      { t: "Gather what you need", d: "Collect documents, translations and fees before booking anything — it prevents repeat visits.", done: false, tool: "Visas & Permits" },
+      { t: "Take the first official step", d: "Book the appointment / enrol / apply. Buonolo will remind you of deadlines.", done: false, tool: "Taxes & ID" },
+      { t: "Complete & verify", d: "Confirm you received the certificate, card or confirmation — and save a copy in your documents.", done: false, tool: "Banking" },
+    ];
+
+    if (user) {
+      const { data: newGoal, error: goalErr } = await supabase.from("goals").insert({
+        user_id: user.id,
+        title: tpl.title,
+        category: tpl.cat || "General"
+      }).select().single();
+
+      if (newGoal && !goalErr) {
+        const tasksPayload = initialSteps.map(s => ({
+          goal_id: newGoal.id,
+          title: JSON.stringify(s)
+        }));
+        await supabase.from("tasks").insert(tasksPayload);
+        await fetchGoals(user.id);
+        return;
+      }
+    }
+
+    setGoals(gs => [...gs, {
+      id: "g" + Date.now(),
+      title: tpl.title,
+      cat: tpl.cat,
+      icon: tpl.icon || Target,
+      steps: initialSteps
+    }]);
+  };
+
+  const handleAddCustomGoal = async (customTitle: string) => {
+    if (!customTitle.trim()) return;
+    const initialSteps = [
+      { t: "First step", d: "Break down your goal into smaller milestones.", done: false, tool: "Tasks" }
+    ];
+
+    if (user) {
+      const { data: newGoal, error } = await supabase.from("goals").insert({
+        user_id: user.id,
+        title: customTitle.trim(),
+        category: "Custom"
+      }).select().single();
+
+      if (newGoal && !error) {
+        await supabase.from("tasks").insert({
+          goal_id: newGoal.id,
+          title: JSON.stringify(initialSteps[0])
+        });
+        await fetchGoals(user.id);
+        return;
+      }
+    }
+
+    setGoals(gs => [...gs, {
+      id: "g" + Date.now(),
+      title: customTitle.trim(),
+      cat: "Custom",
+      icon: Target,
+      steps: initialSteps
+    }]);
+  };
+
+  const handleAddTask = async (goalId: string, taskTitle: string) => {
+    if (!taskTitle.trim()) return;
+    const newStep = { t: taskTitle.trim(), d: "Custom task", done: false, tool: "Tasks" };
+
+    // Optimistic UI update
+    setGoals(gs => gs.map(g => g.id !== goalId ? g : {
+      ...g,
+      steps: [...g.steps, newStep]
+    }));
+
+    if (user) {
+      await supabase.from("tasks").insert({
+        goal_id: goalId,
+        title: JSON.stringify(newStep)
+      });
+      await fetchGoals(user.id);
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    setGoals(gs => gs.filter(g => g.id !== goalId));
+    setOpenGoal(null);
+
+    if (user) {
+      await supabase.from("tasks").delete().eq("goal_id", goalId);
+      await supabase.from("goals").delete().eq("id", goalId);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setAuthLoading(true);
+    const demoId = "44c35de8-0195-4470-97d1-aad6445abf65";
+    const demoUser = {
+      id: demoId,
+      email: "demo@buonolo.app",
+      user_metadata: { full_name: "Demo User" }
+    };
+    await handleUserChange(demoUser);
+    setAuthLoading(false);
+  };
 
   const handleGoogleLogin = async () => {
     setAuthLoading(true);
@@ -471,14 +686,34 @@ export default function BuonoloApp() {
       fetchEvents(origin, finalCity, finalHost);
       
       // Auto-create initial goal based on focus
-      if (focus && focus !== "General") {
-        await supabase.from("user_goals").insert({
-          user_id: user.id,
-          title: `Start with ${focus}`,
-          category: focus === "Anmeldung" ? "Documentation" : focus === "Housing" ? "Housing" : "General",
-          steps: [{ t: `Research ${focus} in ${finalCity}`, d: `Initial research step for ${focus}.`, done: false }]
-        });
-        fetchGoals(user.id);
+      const { data: createdGoal } = await supabase.from("goals").insert({
+        user_id: user.id,
+        title: focus && focus !== "General" ? `Start with ${focus}` : "Settle into your new city",
+        category: focus === "Anmeldung" ? "Documentation" : focus === "Housing" ? "Housing" : "General"
+      }).select().single();
+
+      if (createdGoal) {
+        await supabase.from("tasks").insert([
+          {
+            goal_id: createdGoal.id,
+            title: JSON.stringify({
+              t: `Research ${focus || 'city registration'} in ${finalCity}`,
+              d: `Check official requirements, needed documents, and book an appointment in ${finalCity}.`,
+              done: false,
+              tool: "Registration"
+            })
+          },
+          {
+            goal_id: createdGoal.id,
+            title: JSON.stringify({
+              t: `Set up local bank and tax ID`,
+              d: `Prepare passport and proof of residence.`,
+              done: false,
+              tool: "Banking"
+            })
+          }
+        ]);
+        await fetchGoals(user.id);
       }
       setAuthScreen("");
     } else setToastError(error.message);
@@ -679,7 +914,8 @@ export default function BuonoloApp() {
           authSituation={authSituation} setAuthSituation={setAuthSituation}
           authFocus={authFocus} setAuthFocus={setAuthFocus}
           authLoading={authLoading} handleGoogleLogin={handleGoogleLogin} 
-          handleEmailLogin={handleEmailLogin} handleEmailRegister={handleEmailRegister} handleSetupSave={handleSetupSave} 
+          handleEmailLogin={handleEmailLogin} handleEmailRegister={handleEmailRegister} 
+          handleDemoLogin={handleDemoLogin} handleSetupSave={handleSetupSave} 
           toastError={toastError} T={T} 
         />
       ) : (
@@ -700,6 +936,12 @@ export default function BuonoloApp() {
               goals={goals} setGoals={setGoals} openGoal={openGoal} setOpenGoal={setOpenGoal} 
               showTemplates={showTemplates} setShowTemplates={setShowTemplates} setTab={setTab} 
               setOpenTool={setOpenTool} profile={profile!} T={T} 
+              user={user}
+              onToggleStep={handleToggleStep}
+              onAddGoal={handleAddGoal}
+              onAddCustomGoal={handleAddCustomGoal}
+              onAddTask={handleAddTask}
+              onDeleteGoal={handleDeleteGoal}
             />
           )}
           {tab === "community" && (
@@ -734,6 +976,7 @@ export default function BuonoloApp() {
               settingsSubScreen={settingsSubScreen} setSettingsSubScreen={setSettingsSubScreen} 
               handleLogout={handleLogout} fetchHostInfo={fetchHostInfo} isUpdatingHost={isUpdatingHost} 
               setToastError={setToastError} communitiesData={communitiesData} T={T} toggleSave={toggleSave}
+              user={user}
             />
           )}
           

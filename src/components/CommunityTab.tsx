@@ -255,52 +255,57 @@ export const GroupView = ({ group, onClose, T, onUserClick, onEventClick, onInvi
   useEffect(() => {
     fetchUpdates();
     fetchMembers();
-    const channel = supabase.channel(`realtime_group_updates_${group.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_updates', filter: `group_id=eq.${group.id}` }, () => {
+    const channel = supabase.channel(`realtime_group_posts_${group.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
         fetchUpdates();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${group.id}` }, () => {
+        fetchMembers();
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [group.id]);
 
   const fetchMembers = async () => {
-    const { data, error } = await supabase.from("group_members").select("user_id, profiles(full_name)").eq("group_id", group.id);
+    const { data, error } = await supabase.from("group_members").select("user_id, user_name").eq("group_id", group.id);
     if (!error && data) {
       setActualMembers(data.map((m: any) => ({
         id: m.user_id,
-        name: m.profiles?.full_name || "User"
+        name: m.user_name || "Community Member"
       })));
     }
   };
 
   const fetchUpdates = async () => {
     const { data: updates, error } = await supabase
-      .from("group_updates")
+      .from("posts")
       .select("*")
-      .eq("group_id", group.id)
-      .order("timestamp", { ascending: false });
+      .eq("location", `group:${group.id}`)
+      .order("created_at", { ascending: false });
     
     if (!error && updates) {
       setPosts(updates.map(u => ({
         id: u.id,
-        user: { name: u.author_name },
+        user: { name: u.author_name || "Member" },
         text: u.content,
-        time: new Date(u.timestamp).toLocaleDateString(),
-        likes: 0,
-        liked: false,
-        comments: 0,
+        time: new Date(u.created_at).toLocaleDateString(),
+        likes: Array.isArray(u.likes) ? u.likes.length : 0,
+        liked: Array.isArray(u.likes) && u.likes.includes(user?.id),
+        comments: u.comments_count || 0,
         commentsList: []
       })));
     }
   };
 
   const handlePostUpdate = async () => {
-    if (!newUpdateText.trim() || isPosting) return;
+    if (!newUpdateText.trim() || isPosting || !user) return;
     setIsPosting(true);
-    const { error } = await supabase.from("group_updates").insert({
-      group_id: group.id,
+    const { error } = await supabase.from("posts").insert({
       content: newUpdateText,
-      author_name: user?.user_metadata?.full_name || "User"
+      author_id: user.id,
+      author_name: user?.user_metadata?.full_name || "Member",
+      location: `group:${group.id}`,
+      privacy: "Public"
     });
     if (!error) {
       setNewUpdateText("");
@@ -477,7 +482,7 @@ export const GroupView = ({ group, onClose, T, onUserClick, onEventClick, onInvi
         ))}
       </div>
 
-      <div className="p-4 bg-orange-50/50 dark:bg-zinc-900/20 min-h-[50vh] cardin">
+      <div className="p-4 bg-white dark:bg-zinc-900/20 min-h-[50vh] cardin">
         {activeTab === "discussion" && (
           <div className="space-y-3">
             <div className={`p-4 rounded-2xl ${T.card} border border-orange-100 dark:border-zinc-800 flex gap-3 items-center shadow-sm`}>
@@ -769,59 +774,59 @@ export const CommunityTab = ({ communitiesData, activeCommunityTab, setActiveCom
 
   const fetchCommunities = async () => {
     const { data: groups, error } = await supabase.from("groups").select("*, group_members(user_id)");
-    let dbGroups = [];
-    if (!error && groups) {
-      dbGroups = groups.map((g: any) => ({
+    if (!error && groups && groups.length > 0) {
+      const dbGroups = groups.map((g: any) => ({
         id: g.id,
         name: g.name,
         desc: g.description,
         category: g.category,
-        emoji: g.image || "🏘️",
+        emoji: g.image || (g.category === "Social" ? "🌍" : g.category === "Housing" ? "🏠" : g.category === "Professional" ? "💼" : "🏘️"),
         members: g.group_members?.length || 0,
         joined: g.group_members?.some((m: any) => m.user_id === user?.id)
       }));
+      setData(dbGroups);
+    } else {
+      const o = profile?.origin || "USA";
+      const c = profile?.city || "Berlin";
+      const h = profile?.host || "Germany";
+      setData(GENERATE_DUMMY_COMMUNITIES(o, c, h));
     }
-    const o = profile?.origin || "USA";
-    const c = profile?.city || "Berlin";
-    const h = profile?.host || "Germany";
-    const dummyGroups = GENERATE_DUMMY_COMMUNITIES(o, c, h);
-    setData([...dummyGroups, ...dbGroups]);
   };
 
   const fetchEvents = async () => {
     const { data: evs, error } = await supabase.from("events").select("*, event_attendees(user_id, user_name)");
-    let dbEvents = [];
-    if (!error && evs) {
-      dbEvents = evs.map((e: any) => ({
+    if (!error && evs && evs.length > 0) {
+      const dbEvents = evs.map((e: any) => ({
         ...e,
         attendeesList: e.event_attendees || [],
         joined: e.event_attendees?.some((m: any) => m.user_id === user?.id)
       }));
+      setEvents(dbEvents);
+    } else {
+      const o = profile?.origin || "USA";
+      const c = profile?.city || "Berlin";
+      const h = profile?.host || "Germany";
+      setEvents(GENERATE_DUMMY_EVENTS(o, c, h));
     }
-    const o = profile?.origin || "USA";
-    const c = profile?.city || "Berlin";
-    const h = profile?.host || "Germany";
-    const dummyEvents = GENERATE_DUMMY_EVENTS(o, c, h);
-    setEvents([...dummyEvents, ...dbEvents]);
   };
 
   const fetchPeople = async () => {
     const { data: pros, error } = await supabase.from("profiles").select("*").neq("id", user?.id).limit(10);
-    let dbPeople = [];
-    if (!error && pros) {
-      dbPeople = pros.map((p: any) => ({
+    if (!error && pros && pros.length > 0) {
+      const dbPeople = pros.map((p: any) => ({
         id: p.id,
         name: p.full_name || p.handle || "User",
         origin: p.origin || "Unknown",
         bio: p.bio || "No bio yet.",
         avatar: (p.full_name || p.handle || "U").substring(0, 2).toUpperCase()
       }));
+      setPeople(dbPeople);
+    } else {
+      const o = profile?.origin || "USA";
+      const c = profile?.city || "Berlin";
+      const h = profile?.host || "Germany";
+      setPeople(GENERATE_DUMMY_PEOPLE(o, c, h));
     }
-    const o = profile?.origin || "USA";
-    const c = profile?.city || "Berlin";
-    const h = profile?.host || "Germany";
-    const dummyPeople = GENERATE_DUMMY_PEOPLE(o, c, h);
-    setPeople([...dummyPeople, ...dbPeople]);
   };
 
   const handleCreateEvent = async () => {

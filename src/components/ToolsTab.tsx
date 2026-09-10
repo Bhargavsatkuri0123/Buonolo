@@ -266,7 +266,7 @@ const DocumentMockup = ({ toolName, T }: { toolName: string; T: Theme }) => {
         </div>
       </div>
 
-      <div className="relative border border-orange-100/50 dark:border-zinc-800 rounded-xl bg-orange-50/20 dark:bg-zinc-950/20 p-6 min-h-[220px] flex flex-col justify-between overflow-hidden">
+      <div className="relative border border-orange-100/50 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-950/20 p-6 min-h-[220px] flex flex-col justify-between overflow-hidden">
         {/* Mockup decorative lines */}
         <div className="space-y-3">
           <div className="h-4 bg-orange-100/60 dark:bg-zinc-800/60 rounded w-1/3"></div>
@@ -300,7 +300,7 @@ const DocumentMockup = ({ toolName, T }: { toolName: string; T: Theme }) => {
       </div>
 
       {activeHotspot !== null && (
-        <div className="mt-4 p-3.5 bg-orange-50/50 dark:bg-orange-950/10 border border-orange-100 dark:border-orange-950/30 rounded-xl cardin">
+        <div className="mt-4 p-3.5 bg-white dark:bg-orange-950/10 border border-orange-100 dark:border-orange-950/30 rounded-xl cardin">
           <p className="text-xs font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1.5">
             <span className="w-4 h-4 rounded-full bg-orange-600 text-white flex items-center justify-center text-[9px] font-bold">
               {activeHotspot + 1}
@@ -456,7 +456,7 @@ export const ToolDetail = ({ tool, profile, emergencyData, T, setOpenTool, setGo
                       onClick={() => toggleDoc(doc)}
                       className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
                         isChecked 
-                          ? 'bg-orange-50/20 dark:bg-orange-950/5 border-orange-300 dark:border-orange-900/40' 
+                          ? 'bg-white dark:bg-orange-950/5 border-orange-300 dark:border-orange-900/40' 
                           : `${T.card2} border-orange-100/40 dark:border-zinc-800`
                       }`}
                     >
@@ -505,7 +505,7 @@ export const ToolDetail = ({ tool, profile, emergencyData, T, setOpenTool, setGo
                       </button>
                       
                       {isExpanded && (
-                        <div className={`px-4 pb-5 pt-1 text-xs ${T.sub} leading-relaxed border-t border-orange-100/20 dark:border-zinc-800/20 bg-orange-50/10 dark:bg-zinc-950/10 cardin`}>
+                        <div className={`px-4 pb-5 pt-1 text-xs ${T.sub} leading-relaxed border-t border-orange-100/20 dark:border-zinc-800/20 bg-white dark:bg-zinc-950/10 cardin`}>
                           <p className="mt-2 text-xs leading-relaxed">{step.desc}</p>
                           {step.links && step.links.length > 0 && (
                             <div className="mt-3.5 pt-3 border-t border-orange-100/10 dark:border-zinc-800/10">

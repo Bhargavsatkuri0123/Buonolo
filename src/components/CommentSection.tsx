@@ -17,18 +17,38 @@ export const CommentSection = ({ p, user, profile, T }: CommentSectionProps) => 
   const [loading, setLoading] = useState(true);
 
   const fetchComments = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('comments')
+    let { data, error } = await supabase
+      .from('post_comments')
       .select('*')
       .eq('post_id', p.id)
       .order('created_at', { ascending: true });
-    if (data && !error) setComments(data);
+
+    if (error) {
+      // Fallback in case table is named comments
+      const res = await supabase.from('comments').select('*').eq('post_id', p.id).order('created_at', { ascending: true });
+      data = res.data;
+    }
+
+    if (data) {
+      // Map comment fields (post_comments uses `text`, comments might use `content`)
+      const mapped = data.map((c: any) => ({
+        id: c.id,
+        author_name: c.author_name || (c.user_id === user?.id ? (profile?.name || "Me") : "Community Member"),
+        content: c.text || c.content || "",
+        created_at: c.created_at,
+        user_id: c.user_id || c.author_id
+      }));
+      setComments(mapped);
+    }
     setLoading(false);
-  }, [p.id]);
+  }, [p.id, user?.id, profile?.name]);
 
   useEffect(() => {
     fetchComments();
     const channel = supabase.channel(`comments:${p.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments', filter: `post_id=eq.${p.id}` }, () => {
+        fetchComments();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${p.id}` }, () => {
         fetchComments();
       })
@@ -41,17 +61,28 @@ export const CommentSection = ({ p, user, profile, T }: CommentSectionProps) => 
     const textToSubmit = commentText;
     setCommentText(""); // Clear early for better UX
     
-    const { error } = await supabase.from('comments').insert({
+    let { error } = await supabase.from('post_comments').insert({
       post_id: p.id,
-      author_id: user.id,
-      author_name: profile?.name || "User",
-      content: textToSubmit
+      user_id: user.id,
+      text: textToSubmit
     });
+
+    if (error) {
+      // Try fallback to comments table
+      const res = await supabase.from('comments').insert({
+        post_id: p.id,
+        author_id: user.id,
+        author_name: profile?.name || "User",
+        content: textToSubmit
+      });
+      error = res.error;
+    }
     
     if (error) {
       console.error("Error adding comment:", error);
       setCommentText(textToSubmit); // Restore on error
     } else {
+      fetchComments();
       const { data: postData } = await supabase.from('posts').select('comments_count').eq('id', p.id).single();
       await supabase.from('posts').update({ comments_count: (postData?.comments_count || 0) + 1 }).eq('id', p.id);
     }

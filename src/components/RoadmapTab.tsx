@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, X, CircleCheck, Circle, Wrench, ChevronRight, Flag, Target, ExternalLink, PlayCircle, FileText } from "lucide-react";
+import { Plus, X, CircleCheck, Circle, Wrench, ChevronRight, Flag, Target, Trash2 } from "lucide-react";
 import { Header } from "./Header";
 import { Goal, Theme, Profile } from "../types";
 import { GENERATE_GOAL_TEMPLATES } from "../constants";
@@ -15,15 +15,26 @@ interface RoadmapTabProps {
   setOpenTool: (val: string | null) => void;
   profile: Profile;
   T: Theme;
+  user?: any;
+  onToggleStep?: (gid: string, i: number) => void;
+  onAddGoal?: (tpl: any) => void;
+  onAddCustomGoal?: (title: string) => void;
+  onAddTask?: (goalId: string, title: string) => void;
+  onDeleteGoal?: (goalId: string) => void;
 }
 
 export const RoadmapTab = ({
   goals, setGoals, openGoal, setOpenGoal, showTemplates, setShowTemplates,
-  setTab, setOpenTool, profile, T
+  setTab, setOpenTool, profile, T, user,
+  onToggleStep, onAddGoal, onAddCustomGoal, onAddTask, onDeleteGoal
 }: RoadmapTabProps) => {
   const [localCustomGoalTitle, setLocalCustomGoalTitle] = useState("");
 
   const toggleStep = (gid: string, i: number) => {
+    if (onToggleStep) {
+      onToggleStep(gid, i);
+      return;
+    }
     setGoals(gs => gs.map(g => g.id !== gid ? g : { 
       ...g, 
       steps: g.steps.map((s, j) => j === i ? { ...s, done: !s.done } : s) 
@@ -31,6 +42,10 @@ export const RoadmapTab = ({
   };
 
   const addGoal = (tpl: any) => {
+    if (onAddGoal) {
+      onAddGoal(tpl);
+      return;
+    }
     setGoals(gs => [...gs, {
       id: "g" + Date.now(), title: tpl.title, cat: tpl.cat, icon: tpl.icon,
       steps: [
@@ -45,6 +60,12 @@ export const RoadmapTab = ({
 
   const addCustomGoal = () => {
     if (!localCustomGoalTitle.trim()) return;
+    if (onAddCustomGoal) {
+      onAddCustomGoal(localCustomGoalTitle);
+      setLocalCustomGoalTitle("");
+      setShowTemplates(false);
+      return;
+    }
     setGoals(gs => [...gs, {
       id: "g" + Date.now(), title: localCustomGoalTitle, cat: "Custom", icon: Target,
       steps: [
@@ -60,7 +81,21 @@ export const RoadmapTab = ({
     const done = g.steps.filter(s => s.done).length;
     return (
       <div className="pb-24">
-        <Header T={T} title="Goal" back={() => setOpenGoal(null)} />
+        <Header T={T} title="Goal" back={() => setOpenGoal(null)} right={
+          onDeleteGoal ? (
+            <button 
+              onClick={() => {
+                if (confirm("Are you sure you want to remove this goal?")) {
+                  onDeleteGoal(g.id);
+                }
+              }} 
+              title="Delete Goal"
+              className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors"
+            >
+              <Trash2 size={18} />
+            </button>
+          ) : undefined
+        } />
         <div className={`${T.card} mx-4 rounded-2xl p-4 cardin`}>
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center"><g.icon size={20} /></div>
@@ -106,10 +141,14 @@ export const RoadmapTab = ({
               onChange={(e) => setLocalCustomGoalTitle(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && localCustomGoalTitle.trim()) {
-                  setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
-                    ...goal,
-                    steps: [...goal.steps, { t: localCustomGoalTitle, d: "Custom task", done: false, tool: null }]
-                  }));
+                  if (onAddTask) {
+                    onAddTask(g.id, localCustomGoalTitle.trim());
+                  } else {
+                    setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
+                      ...goal,
+                      steps: [...goal.steps, { t: localCustomGoalTitle, d: "Custom task", done: false, tool: null }]
+                    }));
+                  }
                   setLocalCustomGoalTitle("");
                 }
               }}
@@ -117,10 +156,14 @@ export const RoadmapTab = ({
             <button 
               onClick={() => {
                 if (localCustomGoalTitle.trim()) {
-                  setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
-                    ...goal,
-                    steps: [...goal.steps, { t: localCustomGoalTitle, d: "Custom task", done: false, tool: null }]
-                  }));
+                  if (onAddTask) {
+                    onAddTask(g.id, localCustomGoalTitle.trim());
+                  } else {
+                    setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
+                      ...goal,
+                      steps: [...goal.steps, { t: localCustomGoalTitle, d: "Custom task", done: false, tool: null }]
+                    }));
+                  }
                   setLocalCustomGoalTitle("");
                 }
               }}

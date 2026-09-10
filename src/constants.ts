@@ -95,11 +95,121 @@ export const TEMPLATE_HOST_INFO = (origin: string, city: string, host: string) =
     { label: "Non-Emergency Medical", num: "116 117" },
   ],
   news: [
-    { id: 1, tag: "Transport", title: `New public transport routes added in ${city}`, body: `The local transit authority has announced new routes to ease commuting for residents in ${city}.`, time: "2h ago" },
-    { id: 2, tag: "Housing", title: "Rent control policies update", body: `Local authorities in ${host} are reviewing rent control measures to help newcomers and residents.`, time: "5h ago" },
-    { id: 3, tag: "Community", title: `Annual Expat Meetup announced in ${city}`, body: "Join thousands of fellow expats at the biggest networking event of the year.", time: "1d ago" },
-    { id: 4, tag: "Weather", title: "Upcoming weather advisory for the weekend", body: "Expect heavy rain and winds this weekend. Stay safe and plan indoors.", time: "2d ago" },
-    { id: 5, tag: "Culture", title: "Free museum weekend", body: `Explore the rich history of ${city} with free access to major museums this weekend.`, time: "3d ago" }
+    { 
+      id: 1, 
+      tag: "Transport", 
+      title: `New public transport routes added in ${city}`, 
+      body: `The local transit authority has announced new routes to ease commuting for residents in ${city}.`, 
+      time: "2h ago",
+      source: `${city} Metropolitan Transit Gazette`,
+      author: "Lukas Becker · Urban Mobility Correspondent",
+      readTime: "3 min read",
+      url: `https://transit-news.${city.toLowerCase().replace(/[^a-z0-9]/g, '')}.eu/network-expansion-2026`,
+      highlights: [
+        `Two new direct express lines link outer districts to the ${city} central business core.`,
+        "Service frequency boosted to 4-minute intervals during morning and evening rush hours.",
+        "New digital ticketing system now supports contactless payments and subsidized newcomer passes."
+      ],
+      content: [
+        `Municipal transit officials in ${city} have officially cut the ribbon on an extensive transit network expansion designed to streamline daily commutes for thousands of working residents and newly arrived expatriates.`,
+        `The investment introduces modern, low-emission rolling stock and two high-capacity transit branches connecting growing residential districts directly to major educational, medical, and commercial centers without requiring downtown transfers.`,
+        `"Public transport is the lifeline of our community," stated the director of transport during this morning's press conference. "Our primary focus is ensuring that everyone, especially residents settling into new neighborhoods, can commute quickly, sustainably, and affordably."`,
+        `Commuters can already plan journeys on the updated routes through the official transit app. In addition, registered city residents are eligible for monthly transit pass discounts upon presenting their local address registration.`
+      ],
+      advice: `Download the local ${city} transit app today to check updated live schedules. If you recently registered your residence, verify your eligibility for the local resident transit discount at central station service counters.`
+    },
+    { 
+      id: 2, 
+      tag: "Housing", 
+      title: `Rent control policies and tenant rights update in ${host}`, 
+      body: `Local authorities in ${host} are reviewing rent control measures to help newcomers and residents find stable homes.`, 
+      time: "5h ago",
+      source: `${host} Housing & Urban Development Monitor`,
+      author: "Sarah Lindemann · Real Estate & Policy Analyst",
+      readTime: "4 min read",
+      url: `https://housing-watch.${host.toLowerCase().replace(/[^a-z0-9]/g, '')}.org/policy/rent-ceiling-reforms`,
+      highlights: [
+        `New legislation caps annual rent escalations in designated high-demand metropolitan zones like ${city}.`,
+        "Standardized rental agreements now mandate transparent itemization of ancillary and heating utility charges.",
+        "Expanded free legal counseling clinics launched for international tenants facing lease disputes."
+      ],
+      content: [
+        `Legislators and tenant advocacy groups in ${host} have announced sweeping adjustments to tenant protection statutes, addressing soaring housing costs across major metropolitan regions including ${city}.`,
+        `Under the updated policy guidelines, landlords will face stricter limits on permissible rent increments when establishing new leases, and mandatory transparency rules will require full disclosure of prior tenancy pricing.`,
+        `Furthermore, security deposits are explicitly restricted to a maximum of three net monthly installments, payable across multiple months to ease financial pressure on newly arriving workers and families.`,
+        `Tenant union representatives have praised the reforms while urging newcomers to review their contracts thoroughly before signing, and to utilize municipal rental index calculators to ensure legal compliance.`
+      ],
+      advice: `Never pay deposit funds in cash or before receiving a countersigned lease contract. In ${city}, you can consult local tenant associations (such as the tenant union) for contract verification before signing.`
+    },
+    { 
+      id: 3, 
+      tag: "Community", 
+      title: `Annual International Expat Meetup & Welcome Fair announced in ${city}`, 
+      body: `Join thousands of fellow expats, community ambassadors, and local cultural groups at the biggest networking event of the year.`, 
+      time: "1d ago",
+      source: `${city} International Community Hub`,
+      author: "Carlos Mendez · Community Coordinator",
+      readTime: "2 min read",
+      url: `https://expat-summit.${city.toLowerCase().replace(/[^a-z0-9]/g, '')}.org/events/annual-welcome-fair-2026`,
+      highlights: [
+        `Over 80 cultural associations, language exchange tables, and professional affinity networks participating.`,
+        "Workshops on navigating local bureaucracy, tax basics, and career transition for international professionals.",
+        "Free admission with live acoustic music, local food stalls, and family-friendly activities."
+      ],
+      content: [
+        `The annual ${city} International Expat Fair has officially opened registration, bringing together thousands of residents from across the globe for a weekend of celebration, networking, and practical workshops.`,
+        `Hosted at the city's central exhibition pavilion, the event features designated cultural zones, free introductory language crash courses, and interactive panels hosted by immigration counselors and experienced expat mentors.`,
+        `Special breakout sessions will address topics such as securing healthcare coverage, converting driving permits, navigating child school enrollment, and discovering hidden neighborhood spots.`,
+        `"Moving to a new country can feel daunting in the first few months. This fair is designed to show every newcomer that they are warmly welcomed and surrounded by a vibrant support network," said the event organizer.`
+      ],
+      advice: `RSVP early to secure workshop seating for the legal and career sessions. Bring a notebook and connect with local community group leaders in the Community tab right here in Buonolo!`
+    },
+    { 
+      id: 4, 
+      tag: "Weather", 
+      title: `Upcoming weather advisory and seasonal climate guidance for ${city}`, 
+      body: `Expect changing seasonal conditions and rain this weekend. Stay prepared with local weather tips and transport advice.`, 
+      time: "2d ago",
+      source: `National Meteorological Service · ${city} Bureau`,
+      author: "Dr. Andrea Schmidt · Senior Meteorologist",
+      readTime: "2 min read",
+      url: `https://weather-forecast.${city.toLowerCase().replace(/[^a-z0-9]/g, '')}.int/alerts/weekend-system-advisory`,
+      highlights: [
+        `Moderate to heavy precipitation expected beginning Friday evening through Sunday afternoon.`,
+        `Temperatures forecast to dip 4–6°C below seasonal averages with gusty winds in exposed areas.`,
+        "Municipal teams deployed to clear drainage systems and ensure smooth surface transit operations."
+      ],
+      content: [
+        `Meteorological authorities have issued a regional weather alert for ${city} and neighboring districts ahead of a low-pressure frontal system moving across the territory.`,
+        `Residents are advised to plan indoor activities for the weekend and anticipate minor schedule adjustments on outdoor regional train and ferry connections during the peak of the front.`,
+        `Municipal heating services have commenced their seasonal transition, and apartment building managers are performing standard boiler maintenance checks to ensure reliable warm water and radiator operation throughout the colder period.`,
+        `Emergency services remind cyclists and pedestrians to wear reflective clothing and equip bikes with compliant front and rear illumination during overcast daylight hours.`
+      ],
+      advice: `Keep a reliable waterproof jacket and portable umbrella handy. If you commute by bicycle in ${city}, ensure your front white light and rear red light are charged and functioning to avoid municipal fines.`
+    },
+    { 
+      id: 5, 
+      tag: "Culture", 
+      title: `Free museum weekend and cultural access passes in ${city}`, 
+      body: `Explore the rich history and vibrant arts scene of ${city} with free access to major municipal museums and heritage sites.`, 
+      time: "3d ago",
+      source: `${city} Department of Arts & Cultural Heritage`,
+      author: "Sophie Laurent · Cultural Arts Writer",
+      readTime: "3 min read",
+      url: `https://culture.${city.toLowerCase().replace(/[^a-z0-9]/g, '')}.gov/free-museum-weekend-initiative`,
+      highlights: [
+        `Free entry to more than 35 municipal art galleries, historical landmarks, and science museums.`,
+        "Guided tours offered in English, Spanish, German, French, and Ukrainian throughout both days.",
+        `Special cultural welcome discount card available for students, jobseekers, and newly registered citizens.`
+      ],
+      content: [
+        `Culture lovers in ${city} are in for a treat as the municipal cultural ministry launches its flagship Museum Open Days initiative, welcoming the public into world-class exhibitions completely free of charge.`,
+        `From modern art galleries and natural history archives to ancient historical collections, participating institutions will host special curator talks, interactive workshops, and architectural evening tours.`,
+        `The initiative aims to democratize access to the city's rich heritage, making cultural exploration an effortless weekend leisure activity for both longtime residents and recent international arrivals.`,
+        `"Art and history provide a universal bridge between communities," said the cultural affairs secretary. "We invite everyone to experience our shared spaces and discover the stories that shaped ${city}."`
+      ],
+      advice: `Book time-slot reservations online 24 to 48 hours in advance for top-tier venues to skip standby queues. Many museums offer audio guides in multiple languages via mobile QR codes.`
+    }
   ],
   communities: [
     { name: `${city} Expats`, members: "12.4k", emoji: "🌍", joined: true },

@@ -53,8 +53,20 @@ Return ONLY valid JSON matching this schema exactly:
     { "label": "Non-Emergency", "num": "Local non-emergency number" }
   ],
   "news": [
-    { "id": 1, "tag": "Transport", "title": "Realistic local news headline", "body": "Short snippet", "time": "2h ago" },
-    { "id": 2, "tag": "Housing", "title": "Another headline", "body": "Short snippet", "time": "5h ago" }
+    { 
+      "id": 1, 
+      "tag": "Transport", 
+      "title": "Realistic local news headline", 
+      "body": "Short snippet summarizing the news", 
+      "time": "2h ago",
+      "source": "Local News Publication Name",
+      "author": "Reporter Name",
+      "readTime": "3 min read",
+      "url": "https://news.example.com/local-article",
+      "highlights": ["Key takeaway 1", "Key takeaway 2", "Key takeaway 3"],
+      "content": ["Detailed paragraph 1 explaining the development", "Detailed paragraph 2 with statements or impacts", "Detailed paragraph 3 about next steps"],
+      "advice": "Actionable advice or tips for newly arrived residents"
+    }
   ],
   "communities": [
     { "name": "Realistic local expat group name", "members": "1.2k", "emoji": "🌍", "joined": false },

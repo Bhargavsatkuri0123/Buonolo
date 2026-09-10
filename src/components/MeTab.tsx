@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { Newspaper, LayoutGrid, List, ChevronLeft, ChevronRight, Moon, Sun, Globe2, Shield, LogOut, Info, Bookmark, MapPin, Users, Settings, ChevronDown, ChevronUp } from "lucide-react";
+import { Newspaper, LayoutGrid, List, ChevronLeft, ChevronRight, Moon, Sun, Globe2, Shield, LogOut, Info, Bookmark, MapPin, Users, Settings, ChevronDown, ChevronUp, ArrowRight, BookOpen, Clock, Globe } from "lucide-react";
 import { Header, Logo, AppIcon } from "./Header";
 import { Avatar } from "./Avatar";
 import { Theme, Profile, Post } from "../types";
 import { LOCATIONS, LANGS, SAF } from "../constants";
 import { GroupView, EventView, UserView } from "./CommunityTab";
+import { InAppNewsViewer } from "./InAppNewsViewer";
+import { supabase } from "../../supabase";
 
 interface MeTabProps {
   meScreen: string;
@@ -32,15 +34,47 @@ interface MeTabProps {
   communitiesData: any[];
   T: Theme;
   toggleSave: (id: string) => void;
+  user?: any;
 }
 
 export const MeTab = ({
   meScreen, setMeScreen, profile, setProfile, feed, newsData, newsIdx, setNewsIdx, newsMode, setNewsMode,
   dark, setDark, lang, setLang, notif, setNotif, settingsSubScreen, setSettingsSubScreen,
-  handleLogout, fetchHostInfo, isUpdatingHost, setToastError, communitiesData, T, toggleSave
+  handleLogout, fetchHostInfo, isUpdatingHost, setToastError, communitiesData, T, toggleSave, user
 }: MeTabProps) => {
+  const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
 
   const NewsScreen = () => {
+    if (selectedArticle) {
+      const currentIdx = newsData.findIndex(x => x.id === selectedArticle.id);
+      return (
+        <InAppNewsViewer
+          article={selectedArticle}
+          onClose={() => setSelectedArticle(null)}
+          hasPrev={currentIdx > 0}
+          hasNext={currentIdx !== -1 && currentIdx < newsData.length - 1}
+          currentIndex={currentIdx !== -1 ? currentIdx : 0}
+          totalCount={newsData.length}
+          onPrev={() => {
+            if (currentIdx > 0) {
+              const prev = newsData[currentIdx - 1];
+              setSelectedArticle(prev);
+              setNewsIdx(currentIdx - 1);
+            }
+          }}
+          onNext={() => {
+            if (currentIdx !== -1 && currentIdx < newsData.length - 1) {
+              const next = newsData[currentIdx + 1];
+              setSelectedArticle(next);
+              setNewsIdx(currentIdx + 1);
+            }
+          }}
+          T={T}
+          dark={dark}
+        />
+      );
+    }
+
     const n = newsData[newsIdx];
     if (!n) return <div className="pb-24"><Header T={T} title="Local News" back={() => setMeScreen("root")} /><p className="text-center mt-10">No news available.</p></div>;
     return (
@@ -52,32 +86,74 @@ export const MeTab = ({
           </div>} />
         {newsMode === "cards" ? (
           <div className="mx-4">
-            <div className="rounded-3xl p-6 text-white min-h-[380px] flex flex-col cardin" key={n.id}
-              style={{ background: "linear-gradient(150deg,#2b1a08 0%,#7c3a02 55%,#F26A00 130%)" }}>
-              <span className="self-start text-[11px] font-bold uppercase tracking-wider bg-orange-500 px-2.5 py-1 rounded-full">{n.tag}</span>
-              <h2 className="disp font-bold text-2xl leading-snug mt-4">{n.title}</h2>
+            <div 
+              onClick={() => setSelectedArticle(n)}
+              className="rounded-3xl p-6 text-white min-h-[380px] flex flex-col cardin cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-all group shadow-xl relative overflow-hidden" 
+              key={n.id}
+              style={{ background: "linear-gradient(150deg,#2b1a08 0%,#7c3a02 55%,#F26A00 130%)" }}
+              title="Click to open news article in app"
+            >
+              <div className="flex items-center justify-between">
+                <span className="self-start text-[11px] font-bold uppercase tracking-wider bg-orange-500 px-2.5 py-1 rounded-full shadow-sm">{n.tag}</span>
+                <span className="text-[11px] font-medium bg-white/20 hover:bg-white/30 text-white px-2.5 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-sm transition-colors">
+                  <BookOpen size={12} />
+                  <span>Tap to read in app</span>
+                </span>
+              </div>
+              <h2 className="disp font-bold text-2xl leading-snug mt-4 group-hover:text-orange-100 transition-colors">{n.title}</h2>
               <p className="text-sm text-orange-100 leading-relaxed mt-3 flex-1">{n.body}</p>
-              <p className="text-xs text-orange-200 mt-4">{n.time}</p>
+              
+              <div className="mt-4 pt-3 border-t border-white/20 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-orange-200">
+                  <Clock size={13} />
+                  <span>{n.time}</span>
+                  {n.source && (
+                    <>
+                      <span>·</span>
+                      <span className="truncate max-w-[130px]">{n.source}</span>
+                    </>
+                  )}
+                </div>
+                <span className="bg-white text-orange-600 font-bold px-3 py-1.5 rounded-full flex items-center gap-1 group-hover:bg-orange-50 shadow-sm transition-colors">
+                  <span>Read news</span>
+                  <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
             </div>
             <div className="flex items-center justify-between mt-4">
               <button onClick={() => setNewsIdx(i => Math.max(0, i - 1))} disabled={newsIdx === 0}
-                className={`p-2.5 rounded-full ${T.card} disabled:opacity-40`}><ChevronLeft size={18} className={T.text} /></button>
+                className={`p-2.5 rounded-full ${T.card} disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors`}><ChevronLeft size={18} className={T.text} /></button>
               <div className="flex gap-1.5">
                 {newsData.map((_, i) => <span key={i} className={`h-1.5 rounded-full transition-all ${i === newsIdx ? "w-5 bg-orange-500" : `w-1.5 ${dark ? "bg-zinc-700" : "bg-orange-200"}`}`} />)}
               </div>
               <button onClick={() => setNewsIdx(i => Math.min(newsData.length - 1, i + 1))} disabled={newsIdx === newsData.length - 1}
-                className={`p-2.5 rounded-full ${T.card} disabled:opacity-40`}><ChevronRight size={18} className={T.text} /></button>
+                className={`p-2.5 rounded-full ${T.card} disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors`}><ChevronRight size={18} className={T.text} /></button>
             </div>
-            <p className={`text-center text-xs mt-2 ${T.sub}`}>{newsIdx + 1} of {newsData.length} · swipe through today's local briefs</p>
+            <p className={`text-center text-xs mt-2 ${T.sub}`}>{newsIdx + 1} of {newsData.length} · tap card to open news in app or swipe briefs</p>
           </div>
         ) : (
           <div className="mx-4 space-y-2">
             {newsData.map(x => (
-              <div key={x.id} className={`${T.card} rounded-2xl p-4 cardin`}>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-orange-700">{x.tag}</span>
-                <p className={`font-semibold text-sm mt-1 ${T.text}`}>{x.title}</p>
+              <div 
+                key={x.id} 
+                onClick={() => setSelectedArticle(x)}
+                className={`${T.card} rounded-2xl p-4 cardin cursor-pointer hover:border-orange-400 dark:hover:border-orange-500/50 transition-all border border-transparent group shadow-sm`}
+                title="Click to open news article in app"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400">{x.tag}</span>
+                  <span className="text-xs text-orange-600 dark:text-orange-400 font-semibold flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                    <span>Read in app</span>
+                    <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </div>
+                <p className={`font-semibold text-sm mt-1.5 ${T.text} group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors`}>{x.title}</p>
                 <p className={`text-xs mt-1 leading-relaxed ${T.sub}`}>{x.body}</p>
-                <p className={`text-[11px] mt-2 ${T.sub}`}>{x.time}</p>
+                <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-400">
+                  <span>{x.time}</span>
+                  {x.source && <><span>·</span><span>{x.source}</span></>}
+                  {x.readTime && <><span>·</span><span>{x.readTime}</span></>}
+                </div>
               </div>
             ))}
           </div>
@@ -139,6 +215,13 @@ export const MeTab = ({
               if (!finalHost || !finalCity) return;
               const result = await fetchHostInfo(profile.origin, finalHost, finalCity);
               if (result.success) {
+                if (user) {
+                  await supabase.from('profiles').update({
+                    host: finalHost,
+                    city: finalCity,
+                    updatedAt: new Date().toISOString()
+                  }).eq('id', user.id);
+                }
                 setProfile({ ...profile, host: finalHost, city: finalCity });
               } else {
                 setToastError(result.error || "Failed to update host.");
@@ -428,21 +511,31 @@ const EditProfileScreen = () => {
 
       if (!finalHost || !finalCity) return;
 
+      setIsUpdating(true);
       if (finalHost !== profile.host || finalCity !== profile.city) {
-        setIsUpdating(true);
         const result = await fetchHostInfo(profile.origin, finalHost, finalCity);
-        setIsUpdating(false);
-        if (result.success) {
-          setProfile({ ...formData, host: finalHost, city: finalCity });
-          setMeScreen("root");
-        } else {
+        if (!result.success) {
           setToastError(result.error || "Failed to update profile.");
           setTimeout(() => setToastError(""), 5000);
+          setIsUpdating(false);
+          return;
         }
-      } else {
-        setProfile({ ...formData, host: finalHost, city: finalCity });
-        setMeScreen("root");
       }
+
+      if (user) {
+        await supabase.from('profiles').update({
+          full_name: formData.name,
+          origin: formData.origin,
+          host: finalHost,
+          city: finalCity,
+          bio: formData.bio,
+          updatedAt: new Date().toISOString()
+        }).eq('id', user.id);
+      }
+
+      setProfile({ ...formData, host: finalHost, city: finalCity });
+      setIsUpdating(false);
+      setMeScreen("root");
     };
 
     const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

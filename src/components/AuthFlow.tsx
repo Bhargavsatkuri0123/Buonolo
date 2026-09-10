@@ -30,6 +30,7 @@ interface AuthFlowProps {
   handleGoogleLogin: () => void;
   handleEmailLogin: (e: React.FormEvent) => void;
   handleEmailRegister: (e: React.FormEvent) => void;
+  handleDemoLogin?: () => void;
   handleSetupSave: (
     name: string, 
     origin: string, 
@@ -49,7 +50,7 @@ export const AuthFlow = ({
   authName, setAuthName, authOrigin, setAuthOrigin, authHost, setAuthHost, authCity, setAuthCity,
   authCustomHost, setAuthCustomHost, authCustomCity, setAuthCustomCity,
   authSituation, setAuthSituation, authFocus, setAuthFocus,
-  authLoading, handleGoogleLogin, handleEmailLogin, handleEmailRegister, handleSetupSave,
+  authLoading, handleGoogleLogin, handleEmailLogin, handleEmailRegister, handleDemoLogin, handleSetupSave,
   toastError, T
 }: AuthFlowProps) => {
   if (authScreen === "intro") return (
@@ -66,13 +67,18 @@ export const AuthFlow = ({
       </div>
       <h1 className={`disp font-bold text-3xl ${T.text}`}>Welcome to buonôlô</h1>
       <p className={`mt-2 ${T.sub}`}>Your companion for settling in Germany with confidence.</p>
-      <div className="w-full mt-12 space-y-3 max-w-sm">
-        <button onClick={handleGoogleLogin} disabled={authLoading} className="w-full bg-white text-gray-800 border border-gray-200 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 shadow-sm">
+      <div className="w-full mt-10 space-y-3 max-w-sm">
+        <button onClick={handleGoogleLogin} disabled={authLoading} className="w-full bg-white text-gray-800 border border-gray-200 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 shadow-sm hover:bg-gray-50 transition-colors">
           <Globe2 size={20} /> Continue with Google
         </button>
-        <button onClick={() => setAuthScreen("login")} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-orange-500/20">
+        <button onClick={() => setAuthScreen("login")} className="w-full bg-orange-500 text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-colors">
           Continue with Email
         </button>
+        {handleDemoLogin && (
+          <button onClick={handleDemoLogin} className={`w-full ${T.card2} border ${T.line} ${T.text} font-semibold py-3 rounded-2xl transition-colors hover:border-orange-400`}>
+            Explore as Guest / Demo
+          </button>
+        )}
       </div>
       <p className="mt-8 text-xs text-gray-400">By continuing, you agree to our Terms and Privacy Policy.</p>
     </div>
