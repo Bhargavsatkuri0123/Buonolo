@@ -1,7 +1,7 @@
 import React from "react";
-import { Search, MessageCircle, Bell, ImageIcon, Users as UsersIcon, Globe, MoreHorizontal, Trash, MessageSquare, Share2, Bookmark, Send, Bot, Target, Share } from "lucide-react";
+import { Search, MessageCircle, Bell, ImageIcon, Users as UsersIcon, Globe, MoreHorizontal, Trash, MessageSquare, Share2, Bookmark, Send, Target, Share } from "lucide-react";
 import { Avatar } from "./Avatar";
-import { Header } from "./Header";
+import { Header, PeanutLogo } from "./Header";
 import { supabase } from "../../supabase";
 import { CreatePostModal } from "./CreatePostModal";
 import { LikeButton } from "./LikeButton";
@@ -52,11 +52,8 @@ export const HomeTab = ({
   return (
     <div className="pb-24">
       <CreatePostModal isOpen={isCreatePostOpen} onClose={() => setIsCreatePostOpen(false)} profile={profile} user={user} T={T} />
-      <Header T={T} onLogoClick={() => setTab("bot")} right={
+      <Header T={T} right={
         <div className="flex gap-2">
-          <button onClick={() => setTab("bot")} className={`p-2 rounded-full ${T.card} relative group`}>
-            <Bot size={18} className="text-orange-500 group-hover:scale-110 transition-transform" />
-          </button>
           <button className={`p-2 rounded-full ${T.card}`}><Search size={18} className={T.text} /></button>
           <button onClick={() => setMessengerOpen(true)} className={`p-2 rounded-full ${T.card} relative`}>
             <MessageCircle size={18} className={T.text} />

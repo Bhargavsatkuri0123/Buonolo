@@ -1,4 +1,4 @@
-import { FileText, KeyRound, CreditCard, Languages, Car, Briefcase, Stethoscope, Users, Building, Scale, BookOpen, GraduationCap, Store, Heart, Church, Dumbbell, AlertTriangle, MessageCircle, Gavel, Handshake, Globe } from "lucide-react";
+import { Map, FileText, KeyRound, CreditCard, Languages, Car, Briefcase, Stethoscope, Users, Building, Scale, BookOpen, GraduationCap, Store, Heart, Church, Dumbbell, AlertTriangle, MessageCircle, Gavel, Handshake, Globe } from "lucide-react";
 
 export const LOCATIONS: Record<string, string[]> = {
   "Argentina": ["Buenos Aires", "Córdoba", "Rosario", "Mendoza", "Other"],
@@ -39,9 +39,45 @@ export const LOCATIONS: Record<string, string[]> = {
 export const LANGS = ["English", "Deutsch", "हिन्दी", "Türkçe", "العربية", "Español", "Português", "Polski"];
 
 export const GENERATE_DUMMY_COMMUNITIES = (origin: string, city: string, host: string) => [
-  { id: "c1", name: `${city} Expats`, members: "12.4k", emoji: "🌍", category: "General", joined: true },
-  { id: "c2", name: `${origin} Expats in ${host}`, members: "8.2k", emoji: "🤝", category: "Social", joined: false },
-  { id: "c3", name: `Foodies of ${city}`, members: "3.1k", emoji: "🥑", category: "Lifestyle", joined: false },
+  { 
+    id: "c1", 
+    name: `${city} Expats`, 
+    members: "12.4k", 
+    emoji: "🌍", 
+    category: "General", 
+    joined: true,
+    creator_name: "Sarah Miller",
+    creator_id: "p1",
+    admin_name: "Sarah Miller",
+    admin_ids: ["p1", "p2"],
+    desc: `The central hub for all international newcomers, students, and professionals in ${city}. Meet peers, get registration tips, and find weekend events!`
+  },
+  { 
+    id: "c2", 
+    name: `${origin} Expats in ${host}`, 
+    members: "8.2k", 
+    emoji: "🤝", 
+    category: "Social", 
+    joined: false,
+    creator_name: "Carlos Ramos",
+    creator_id: "p4",
+    admin_name: "Carlos Ramos",
+    admin_ids: ["p4"],
+    desc: `Dedicated support and cultural exchange network for ${origin} nationals settling in ${host}.`
+  },
+  { 
+    id: "c3", 
+    name: `Foodies of ${city}`, 
+    members: "3.1k", 
+    emoji: "🥑", 
+    category: "Lifestyle", 
+    joined: false,
+    creator_name: "Elena Rossi",
+    creator_id: "p3",
+    admin_name: "Elena Rossi",
+    admin_ids: ["p3"],
+    desc: `Discover authentic restaurants, international grocery stores, and hidden culinary gems around ${city}.`
+  },
 ];
 
 export const DUMMY_COMMUNITIES = GENERATE_DUMMY_COMMUNITIES("USA", "Berlin", "Germany");
@@ -162,7 +198,7 @@ export const TEMPLATE_HOST_INFO = (origin: string, city: string, host: string) =
         `Special breakout sessions will address topics such as securing healthcare coverage, converting driving permits, navigating child school enrollment, and discovering hidden neighborhood spots.`,
         `"Moving to a new country can feel daunting in the first few months. This fair is designed to show every newcomer that they are warmly welcomed and surrounded by a vibrant support network," said the event organizer.`
       ],
-      advice: `RSVP early to secure workshop seating for the legal and career sessions. Bring a notebook and connect with local community group leaders in the Community tab right here in Buonolo!`
+      advice: `RSVP early to secure workshop seating for the legal and career sessions. Bring a notebook and connect with local community group leaders in the Community tab right here in Meet Peanut!`
     },
     { 
       id: 4, 
@@ -220,6 +256,19 @@ export const TEMPLATE_HOST_INFO = (origin: string, city: string, host: string) =
   ],
   
   toolSections: [
+    {
+      label: "Planning & Goals",
+      items: [
+        {
+          name: "Roadmaps",
+          desc: "View and manage your relocation roadmap and guided goals.",
+          icon: Map,
+          bg: "bg-blue-500/10 dark:bg-blue-500/20",
+          gradient: "from-blue-500 to-indigo-600",
+          color: "text-blue-600 dark:text-blue-400"
+        }
+      ]
+    },
     {
       label: "Emergency & Safety",
       items: [

@@ -1,6 +1,6 @@
 import React from "react";
 import { Send } from "lucide-react";
-import { Header } from "./Header";
+import { Header, PeanutLogo } from "./Header";
 import { Theme, Profile } from "../types";
 
 interface BotTabProps {
@@ -23,12 +23,12 @@ export const BotTab = ({ setTab, profile, T, messages, onSend, loading }: BotTab
 
   return (
     <div className="pb-32 flex flex-col min-h-screen">
-      <Header T={T} title="Mr O (Assistant)" back={() => setTab("home")} />
+      <Header T={T} title={<><PeanutLogo size={24} /> Ask Peanut</>} back={() => setTab("home")} />
       <div className="flex-1 px-4 space-y-4 mt-4 overflow-y-auto no-scrollbar">
         {messages.map(m => (
           <div key={m.id} className={`flex ${m.isMe ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${m.isMe ? "bg-orange-500 text-white rounded-tr-sm" : `${T.card} ${T.text} rounded-tl-sm border border-orange-100 dark:border-zinc-800 shadow-sm`}`}>
-              {!m.isMe && <p className="font-bold text-orange-500 mb-1 text-[10px] uppercase tracking-wider">{m.sender}</p>}
+            {!m.isMe && <div className="mr-2 mt-1 shrink-0"><PeanutLogo size={28} /></div>}
+            <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${m.isMe ? "bg-orange-500 text-white rounded-tr-sm" : `${T.card} ${T.text} rounded-tl-sm border border-orange-100 dark:border-zinc-800 shadow-sm`}`}>
               {m.text}
               <p className={`text-[9px] mt-1 opacity-60 ${m.isMe ? "text-white" : T.sub}`}>{m.time}</p>
             </div>
@@ -36,7 +36,8 @@ export const BotTab = ({ setTab, profile, T, messages, onSend, loading }: BotTab
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className={`px-4 py-2 rounded-2xl text-sm ${T.card} ${T.text} rounded-tl-sm border border-orange-100 dark:border-zinc-800`}>
+            <div className="mr-2 mt-1 shrink-0"><PeanutLogo size={28} /></div>
+            <div className={`px-4 py-3 rounded-2xl text-sm ${T.card} ${T.text} rounded-tl-sm border border-orange-100 dark:border-zinc-800 shadow-sm`}>
               <div className="flex gap-1">
                 <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce" />
                 <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-bounce [animation-delay:0.2s]" />
@@ -52,7 +53,7 @@ export const BotTab = ({ setTab, profile, T, messages, onSend, loading }: BotTab
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSend()}
-            placeholder="Ask Mr O..." 
+            placeholder="Ask Peanut..." 
             className={`flex-1 bg-transparent text-sm outline-none py-1.5 ${T.text}`} 
           />
           <button 

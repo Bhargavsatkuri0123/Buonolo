@@ -259,3 +259,51 @@ using (
   bucket_id = 'post-attachments' 
   AND auth.uid() = owner
 );
+
+-- CHAT ROOMS & MESSAGES
+create table if not exists public.chat_rooms (
+  id uuid default gen_random_uuid() primary key,
+  participants text[] not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.chat_rooms enable row level security;
+
+create policy "Allow participants to view their chat rooms" on public.chat_rooms
+  for select using (auth.uid()::text = any(participants) or auth.role() = 'anon');
+
+create policy "Allow participants to create chat rooms" on public.chat_rooms
+  for insert with check (auth.uid()::text = any(participants) or auth.role() = 'anon');
+
+alter publication supabase_realtime add table chat_rooms;
+
+create table if not exists public.messages (
+  id uuid default gen_random_uuid() primary key,
+  chat_room_id uuid references public.chat_rooms on delete cascade not null,
+  sender_id uuid not null,
+  text text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.messages enable row level security;
+
+create policy "Allow viewing messages in room" on public.messages
+  for select using (
+    exists (
+      select 1 from public.chat_rooms
+      where id = messages.chat_room_id
+      and (auth.uid()::text = any(participants) or auth.role() = 'anon')
+    )
+  );
+
+create policy "Allow inserting messages" on public.messages
+  for insert with check (
+    (auth.uid() = sender_id or auth.role() = 'anon')
+    and exists (
+      select 1 from public.chat_rooms
+      where id = messages.chat_room_id
+      and (auth.uid()::text = any(participants) or auth.role() = 'anon')
+    )
+  );
+
+alter publication supabase_realtime add table messages;

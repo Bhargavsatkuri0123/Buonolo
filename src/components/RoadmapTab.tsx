@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, X, CircleCheck, Circle, Wrench, ChevronRight, Flag, Target, Trash2 } from "lucide-react";
+import { Plus, X, Check, Wrench, ChevronRight, Flag, Trophy, Target, Trash2 } from "lucide-react";
 import { Header } from "./Header";
 import { Goal, Theme, Profile } from "../types";
 import { GENERATE_GOAL_TEMPLATES } from "../constants";
@@ -51,7 +51,7 @@ export const RoadmapTab = ({
       steps: [
         { t: "Understand the requirements", d: "Open the linked tool to see the full checklist for your situation and nationality.", done: false, tool: "Registration" },
         { t: "Gather what you need", d: "Collect documents, translations and fees before booking anything — it prevents repeat visits.", done: false, tool: "Visas & Permits" },
-        { t: "Take the first official step", d: "Book the appointment / enrol / apply. Buonolo will remind you of deadlines.", done: false, tool: "Taxes & ID" },
+        { t: "Take the first official step", d: "Book the appointment / enrol / apply. Meet Peanut will remind you of deadlines.", done: false, tool: "Taxes & ID" },
         { t: "Complete & verify", d: "Confirm you received the certificate, card or confirmation — and save a copy in your documents.", done: false, tool: "Banking" },
       ],
     }]);
@@ -79,9 +79,12 @@ export const RoadmapTab = ({
   const g = goals.find(x => x.id === openGoal);
   if (g) {
     const done = g.steps.filter(s => s.done).length;
+    const allDone = done === g.steps.length && g.steps.length > 0;
+    const pct = Math.round((done / Math.max(1, g.steps.length)) * 100);
+
     return (
       <div className="pb-24">
-        <Header T={T} title="Goal" back={() => setOpenGoal(null)} right={
+        <Header T={T} title="Goal Roadmap" back={() => setOpenGoal(null)} right={
           onDeleteGoal ? (
             <button 
               onClick={() => {
@@ -96,81 +99,219 @@ export const RoadmapTab = ({
             </button>
           ) : undefined
         } />
-        <div className={`${T.card} mx-4 rounded-2xl p-4 cardin`}>
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center"><g.icon size={20} /></div>
-            <div>
-              <p className={`disp font-bold ${T.text}`}>{g.title}</p>
-              <p className={`text-xs ${T.sub}`}>{g.cat} · {done}/{g.steps.length} steps done</p>
-            </div>
-          </div>
-          <div className={`h-2 rounded-full mt-3 ${T.card2}`}>
-            <div className="h-2 rounded-full bg-orange-500 transition-all" style={{ width: `${(done / g.steps.length) * 100}%` }} />
-          </div>
-        </div>
-        <div className="mx-4 mt-5 relative">
-          <div className="absolute left-[13px] top-2 bottom-6 flightpath" />
-          {g.steps.map((s, i) => (
-            <div key={i} className="flex gap-3 mb-4 relative">
-              <button onClick={() => toggleStep(g.id, i)} className="mt-1 shrink-0 z-10">
-                {s.done
-                  ? <CircleCheck size={28} className="text-orange-600 bg-white rounded-full" fill="#d1fae5" />
-                  : <Circle size={28} className={`text-orange-400 ${T.bg} rounded-full`} />}
-              </button>
-              <div className={`${T.card} rounded-2xl p-4 flex-1 ${s.done ? "opacity-70" : ""}`}>
-                <p className={`font-semibold text-sm ${T.text} ${s.done ? "line-through" : ""}`}>{i + 1}. {s.t}</p>
-                <p className={`text-xs mt-1 leading-relaxed ${T.sub}`}>{s.d}</p>
-                <button onClick={() => { setTab("tools"); setOpenTool(s.tool); }}
-                  className="mt-2 text-xs font-semibold text-orange-700 flex items-center gap-1">
-                  <Wrench size={12} /> Open tool: {s.tool} <ChevronRight size={12} />
-                </button>
+
+        {/* Goal Summary Card with Segmented Milestone Track */}
+        <div className={`${T.card} mx-4 rounded-2xl p-4.5 cardin shadow-sm border border-slate-100 dark:border-zinc-800`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <g.icon size={22} />
+              </div>
+              <div className="min-w-0">
+                <p className={`disp font-bold text-lg leading-tight ${T.text} truncate`}>{g.title}</p>
+                <p className={`text-xs ${T.sub} mt-0.5`}>{g.cat} · {done} of {g.steps.length} milestones complete</p>
               </div>
             </div>
-          ))}
-          <div className="flex gap-3 items-center relative mb-4">
-            <Flag size={26} className="text-orange-500 z-10" />
-            <p className={`text-sm font-semibold ${T.text}`}>Goal complete — celebrate & share your tips 🎉</p>
+            <div className="text-right shrink-0">
+              <span className={`disp font-bold text-lg ${allDone ? "text-emerald-500" : "text-orange-600 dark:text-orange-400"}`}>
+                {pct}%
+              </span>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-2 mt-6">
-            <input 
-              type="text" 
-              placeholder="Add a new task..." 
-              className={`flex-1 ${T.card2} rounded-xl px-4 py-3 text-sm outline-none ${T.text} border border-orange-50 dark:border-zinc-800`}
-              value={localCustomGoalTitle}
-              onChange={(e) => setLocalCustomGoalTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && localCustomGoalTitle.trim()) {
-                  if (onAddTask) {
-                    onAddTask(g.id, localCustomGoalTitle.trim());
-                  } else {
-                    setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
-                      ...goal,
-                      steps: [...goal.steps, { t: localCustomGoalTitle, d: "Custom task", done: false, tool: null }]
-                    }));
-                  }
-                  setLocalCustomGoalTitle("");
+
+          {/* Segmented Milestone Indicator Bar */}
+          <div className="flex items-center gap-1.5 mt-3.5">
+            {g.steps.map((step, sIdx) => (
+              <div
+                key={sIdx}
+                className={`h-2 rounded-full flex-1 transition-all ${
+                  step.done ? "bg-orange-500" : `${T.card2}`
+                }`}
+                title={`Milestone ${sIdx + 1}: ${step.done ? "Done" : "Pending"}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Milestone Timeline / Steps */}
+        <div className="mx-4 mt-6">
+          {g.steps.map((s, i) => {
+            const isCurrent = !s.done && (i === 0 || g.steps[i - 1].done);
+            return (
+              <div key={i} className="flex items-stretch gap-3.5 relative group">
+                {/* Dedicated Centered Milestone Column (Guarantees 100% Vertical Alignment) */}
+                <div className="flex flex-col items-center shrink-0 w-9">
+                  {/* Milestone Node Button */}
+                  <button
+                    onClick={() => toggleStep(g.id, i)}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 z-10 transition-all cursor-pointer active:scale-95 ${
+                      s.done
+                        ? "bg-orange-500 text-white shadow-md shadow-orange-500/25 ring-4 ring-orange-100 dark:ring-orange-950/50"
+                        : isCurrent
+                        ? "bg-white dark:bg-zinc-900 text-orange-600 border-2 border-orange-500 ring-4 ring-orange-500/20 font-bold text-xs shadow-sm"
+                        : "bg-white dark:bg-zinc-900 text-slate-400 dark:text-zinc-500 border-2 border-slate-200 dark:border-zinc-700 font-semibold text-xs"
+                    }`}
+                    title={s.done ? "Mark step incomplete" : "Mark step complete"}
+                    aria-label={`Milestone ${i + 1}: ${s.t} - ${s.done ? "Completed" : "Incomplete"}`}
+                  >
+                    {s.done ? (
+                      <Check size={18} className="stroke-[2.5]" />
+                    ) : (
+                      <span>{i + 1}</span>
+                    )}
+                  </button>
+
+                  {/* Vertical connecting flightpath line */}
+                  <div className="flex-1 w-[3px] my-1 relative flex justify-center">
+                    <div 
+                      className={`w-[3px] h-full ${
+                        s.done 
+                          ? "bg-orange-400/80" 
+                          : "border-l-2 border-dashed border-orange-400/60 dark:border-orange-500/40"
+                      }`} 
+                    />
+                  </div>
+                </div>
+
+                {/* Milestone Content Card */}
+                <div className={`flex-1 ${T.card} rounded-2xl p-4 mb-3.5 border transition-all shadow-sm ${
+                  s.done 
+                    ? "border-emerald-500/20 opacity-80" 
+                    : isCurrent
+                    ? "border-orange-300 dark:border-orange-900/60 shadow-orange-500/5"
+                    : "border-transparent hover:border-slate-200 dark:hover:border-zinc-700"
+                }`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`font-semibold text-sm ${T.text} ${s.done ? "line-through text-slate-400 dark:text-zinc-500" : ""}`}>
+                      {s.t}
+                    </p>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
+                      s.done 
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                        : isCurrent 
+                        ? "bg-orange-500/10 text-orange-600 dark:text-orange-400" 
+                        : `${T.card2} ${T.sub}`
+                    }`}>
+                      {s.done ? "Done" : isCurrent ? "Current" : `Step ${i + 1}`}
+                    </span>
+                  </div>
+
+                  <p className={`text-xs mt-1.5 leading-relaxed ${T.sub}`}>
+                    {s.d}
+                  </p>
+
+                  {/* Links attached to step if any */}
+                  {s.links && s.links.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {s.links.map((link, lIdx) => (
+                        <a
+                          key={lIdx}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`text-[11px] font-medium px-2 py-0.5 rounded-lg ${T.card2} ${T.sub} hover:${T.text} flex items-center gap-1`}
+                        >
+                          <span>{link.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Open Tool Action Button */}
+                  {s.tool && (
+                    <button 
+                      onClick={() => { setTab("tools"); setOpenTool(s.tool); }}
+                      className="mt-3 text-xs font-semibold text-orange-600 dark:text-orange-400 flex items-center gap-1.5 hover:underline bg-orange-500/10 dark:bg-orange-950/30 px-2.5 py-1.5 rounded-xl w-fit transition-colors"
+                    >
+                      <Wrench size={12} />
+                      <span>Open tool: {s.tool}</span>
+                      <ChevronRight size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Destination Milestone (Final Completion Node) */}
+          <div className="flex items-stretch gap-3.5 relative">
+            <div className="flex flex-col items-center shrink-0 w-9">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 z-10 transition-all ${
+                allDone
+                  ? "bg-gradient-to-tr from-amber-500 to-orange-500 text-white shadow-lg shadow-orange-500/30 ring-4 ring-orange-200 dark:ring-orange-950/60"
+                  : "bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 border-2 border-dashed border-slate-300 dark:border-zinc-700"
+              }`}>
+                {allDone ? <Trophy size={18} /> : <Flag size={17} />}
+              </div>
+            </div>
+
+            <div className={`flex-1 rounded-2xl p-4 mb-4 border transition-all ${
+              allDone
+                ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md border-transparent"
+                : `${T.card} border-dashed border-slate-200 dark:border-zinc-800`
+            }`}>
+              <div className="flex items-center justify-between">
+                <p className={`font-bold text-sm ${allDone ? "text-white" : T.text}`}>
+                  {allDone ? "Goal Completed! 🎉" : "Destination: Goal Complete"}
+                </p>
+                {allDone && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white px-2 py-0.5 rounded-full">
+                    100% Achieved
+                  </span>
+                )}
+              </div>
+              <p className={`text-xs mt-1 leading-relaxed ${allDone ? "text-orange-50" : T.sub}`}>
+                {allDone 
+                  ? "Congratulations! You've accomplished all milestone steps for this roadmap. Keep shining in your journey!"
+                  : "Complete all milestone steps above to finish this roadmap goal."
                 }
-              }}
-            />
-            <button 
-              onClick={() => {
-                if (localCustomGoalTitle.trim()) {
-                  if (onAddTask) {
-                    onAddTask(g.id, localCustomGoalTitle.trim());
-                  } else {
-                    setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
-                      ...goal,
-                      steps: [...goal.steps, { t: localCustomGoalTitle, d: "Custom task", done: false, tool: null }]
-                    }));
+              </p>
+            </div>
+          </div>
+
+          {/* Add a new milestone task */}
+          <div className="mt-4 mb-6">
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                placeholder="Add a new milestone task..." 
+                className={`flex-1 ${T.card2} rounded-xl px-4 py-3 text-sm outline-none ${T.text} border border-orange-100 dark:border-zinc-800 focus:border-orange-500 transition-colors`}
+                value={localCustomGoalTitle}
+                onChange={(e) => setLocalCustomGoalTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && localCustomGoalTitle.trim()) {
+                    if (onAddTask) {
+                      onAddTask(g.id, localCustomGoalTitle.trim());
+                    } else {
+                      setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
+                        ...goal,
+                        steps: [...goal.steps, { t: localCustomGoalTitle.trim(), d: "Custom milestone task", done: false, tool: null }]
+                      }));
+                    }
+                    setLocalCustomGoalTitle("");
                   }
-                  setLocalCustomGoalTitle("");
-                }
-              }}
-              className="bg-orange-500 text-white rounded-xl p-3 shrink-0 flex items-center justify-center active:scale-95 transition-transform"
-            >
-              <Plus size={20} />
-            </button>
+                }}
+              />
+              <button 
+                onClick={() => {
+                  if (localCustomGoalTitle.trim()) {
+                    if (onAddTask) {
+                      onAddTask(g.id, localCustomGoalTitle.trim());
+                    } else {
+                      setGoals(gs => gs.map(goal => goal.id !== g.id ? goal : {
+                        ...goal,
+                        steps: [...goal.steps, { t: localCustomGoalTitle.trim(), d: "Custom milestone task", done: false, tool: null }]
+                      }));
+                    }
+                    setLocalCustomGoalTitle("");
+                  }
+                }}
+                className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl p-3 shrink-0 flex items-center justify-center active:scale-95 transition-all shadow-sm"
+                title="Add task"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -179,25 +320,33 @@ export const RoadmapTab = ({
   return (
     <div className="pb-24">
       <Header T={T} title="Roadmap" right={
-        <button onClick={() => setShowTemplates(true)} className="bg-orange-500 text-white p-2 rounded-full"><Plus size={18} /></button>} />
-      <p className={`mx-4 text-sm ${T.sub} mb-4`}>Micro-goals for settling into {profile.host}. Set a goal — Buonolo breaks it into guided steps.</p>
+        <button onClick={() => setShowTemplates(true)} className="bg-orange-500 text-white p-2 rounded-full shadow-sm hover:opacity-90 active:scale-95 transition-all"><Plus size={18} /></button>} />
+      <p className={`mx-4 text-sm ${T.sub} mb-4`}>Micro-goals for settling into {profile.host}. Set a goal — Meet Peanut breaks it into guided steps.</p>
       {goals.map(g => {
-        const done = g.steps.filter(s => s.done).length, pct = Math.round((done / g.steps.length) * 100);
+        const done = g.steps.filter(s => s.done).length, pct = Math.round((done / Math.max(1, g.steps.length)) * 100);
         return (
-          <button key={g.id} onClick={() => setOpenGoal(g.id)} className={`${T.card} mx-4 mb-3 rounded-2xl p-4 w-[calc(100%-2rem)] text-left cardin`}>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0"><g.icon size={20} /></div>
+          <button key={g.id} onClick={() => setOpenGoal(g.id)} className={`${T.card} mx-4 mb-3 rounded-2xl p-4 w-[calc(100%-2rem)] text-left cardin border border-slate-100 dark:border-zinc-800 hover:border-orange-300 dark:hover:border-zinc-700 transition-all shadow-sm group`}>
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform"><g.icon size={20} /></div>
               <div className="flex-1 min-w-0">
-                <p className={`font-semibold text-sm ${T.text}`}>{g.title}</p>
-                <p className={`text-xs ${T.sub}`}>{g.cat} · {done}/{g.steps.length} steps</p>
+                <p className={`font-semibold text-sm ${T.text} group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors`}>{g.title}</p>
+                <p className={`text-xs ${T.sub}`}>{g.cat} · {done}/{g.steps.length} milestones done</p>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <p className="disp font-bold text-orange-600">{pct}%</p>
-                <ChevronRight size={16} className={`${T.sub} ml-auto`} />
+                <ChevronRight size={16} className={`${T.sub} ml-auto group-hover:translate-x-0.5 transition-transform`} />
               </div>
             </div>
-            <div className={`h-1.5 rounded-full mt-3 ${T.card2}`}>
-              <div className="h-1.5 rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
+            {/* Segmented Milestone Progress Track */}
+            <div className="flex items-center gap-1 mt-3">
+              {g.steps.map((step, sIdx) => (
+                <div 
+                  key={sIdx}
+                  className={`h-1.5 rounded-full flex-1 transition-all ${
+                    step.done ? "bg-orange-500" : `${T.card2}`
+                  }`}
+                />
+              ))}
             </div>
           </button>
         );

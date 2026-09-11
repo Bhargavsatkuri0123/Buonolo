@@ -4,7 +4,7 @@ import { supabase } from "./supabase";
 
 // Types & Constants
 import { Profile, Post, Goal, Theme } from "./src/types";
-import { LOCATIONS, SAF, DUMMY_FEED, TEMPLATE_HOST_INFO, GENERATE_DUMMY_FEED } from "./src/constants";
+import { LOCATIONS, SAF, DUMMY_FEED, TEMPLATE_HOST_INFO, GENERATE_DUMMY_FEED, DUMMY_PEOPLE } from "./src/constants";
 
 // Components
 import { AuthFlow } from "./src/components/AuthFlow";
@@ -12,11 +12,12 @@ import { MessengerModal } from "./src/components/MessengerModal";
 import { HomeTab } from "./src/components/HomeTab";
 import { RoadmapTab } from "./src/components/RoadmapTab";
 import { BotTab } from "./src/components/BotTab";
+import { PeanutLogo } from "./src/components/Header";
 import { ToolsTab } from "./src/components/ToolsTab";
 import { CommunityTab } from "./src/components/CommunityTab";
 import { MeTab } from "./src/components/MeTab";
 
-/* ─────────────────────────────  BUONOLO  ─────────────────────────────
+/* ─────────────────────────────  MEET PEANUT  ─────────────────────────────
    Brand: vivid orange, ink navy, flight-path green (dashed), warm cream.
    Signature: the dashed green "flight path" that threads roadmap steps.
 ──────────────────────────────────────────────────────────────────────── */
@@ -34,7 +35,25 @@ const FONT = (
   `}</style>
 );
 
-export default function BuonoloApp() {
+const isUuid = (val: string): boolean => {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+};
+
+const SEED_DIRECT_MESSAGES = [
+  {
+    id: "seed-msg-1",
+    threadId: "p1",
+    threadName: "Sarah Miller",
+    sender: "Sarah Miller",
+    text: "Hey! Welcome to the city. Let me know if you need any pointers on getting registered or finding a place!",
+    time: "Yesterday",
+    isMe: false,
+    sharedPost: null,
+    created_at: new Date(Date.now() - 86400000).toISOString()
+  }
+];
+
+export default function MeetPeanutApp() {
   const [tab, setTab] = useState("home");
   const [dark, setDark] = useState(false);
   const [lang, setLang] = useState("English");
@@ -66,9 +85,17 @@ export default function BuonoloApp() {
   const [messengerOpen, setMessengerOpen] = useState(false);
   const [activeMessageThread, setActiveMessageThread] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
-  const [directMessages, setDirectMessages] = useState<any[]>([]);
+  const [sharedPostData, setSharedPostData] = useState<any>(null);
+  const [directMessages, setDirectMessages] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem("meet-peanut_dm_default");
+      return stored ? JSON.parse(stored) : SEED_DIRECT_MESSAGES;
+    } catch {
+      return SEED_DIRECT_MESSAGES;
+    }
+  });
   const [botMessages, setBotMessages] = useState<any[]>([
-    { id: "b1", sender: "Mr O", text: "Hello! I am Mr O, your immigration assistant. Ask me anything!", time: "Now", isMe: false }
+    { id: "b1", sender: "Peanut", text: "Hello! I am Peanut, your immigration assistant. Ask me anything!", time: "Now", isMe: false }
   ]);
   const [botLoading, setBotLoading] = useState(false);
 
@@ -131,65 +158,106 @@ export default function BuonoloApp() {
   const fetchMessages = async () => {
     if (!user) return;
     
-    // 1. Fetch chat rooms for user
-    const { data: rooms, error: roomsError } = await supabase
-      .from('chat_rooms')
-      .select('id, participants')
-      .contains('participants', [user.id]);
-      
-    if (roomsError || !rooms) return;
-    
-    const roomIds = rooms.map(r => r.id);
-    if (roomIds.length === 0) {
-      setDirectMessages([]);
+    // 1. Load locally stored messages first
+    let localMsgs: any[] = [];
+    try {
+      const stored = localStorage.getItem(`meet-peanut_dm_${user.id}`);
+      if (stored) {
+        localMsgs = JSON.parse(stored);
+      } else {
+        localMsgs = [...SEED_DIRECT_MESSAGES];
+      }
+    } catch {
+      localMsgs = [...SEED_DIRECT_MESSAGES];
+    }
+
+    // If user is demo user or not a valid UUID, use local messages
+    if (!isUuid(user.id)) {
+      setDirectMessages(localMsgs);
       return;
     }
-    
-    // 2. Fetch messages for these rooms
-    const { data: messages, error: msgsError } = await supabase
-      .from('messages')
-      .select('*')
-      .in('chat_room_id', roomIds)
-      .order('created_at', { ascending: true });
-      
-    if (msgsError || !messages) return;
-    
-    // 3. Resolve other user profiles
-    const otherUserIds = new Set<string>();
-    rooms.forEach(r => {
-      r.participants.forEach((p: string) => {
-        if (p !== user.id) otherUserIds.add(p);
-      });
-    });
-    
-    let profilesMap: Record<string, string> = {};
-    if (otherUserIds.size > 0) {
-      const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', Array.from(otherUserIds));
-      if (profiles) {
-        profiles.forEach(p => profilesMap[p.id] = p.full_name || "Unknown");
+
+    try {
+      const session = (await supabase.auth.getSession()).data?.session;
+      if (!session || session.user?.id !== user.id) {
+        setDirectMessages(localMsgs);
+        return;
       }
-    }
-    
-    // 4. Format messages
-    const formatted = messages.map(m => {
-      const room = rooms.find(r => r.id === m.chat_room_id);
-      const otherUserId = room?.participants.find((p: string) => p !== user.id) || "unknown";
-      const isMe = m.sender_id === user.id;
-      const threadName = profilesMap[otherUserId] || "Unknown User";
+
+      // 2. Fetch chat rooms for user from Supabase
+      const { data: rooms, error: roomsError } = await supabase
+        .from('chat_rooms')
+        .select('id, participants')
+        .contains('participants', [user.id]);
+        
+      if (roomsError || !rooms || rooms.length === 0) {
+        setDirectMessages(localMsgs);
+        return;
+      }
       
-      return {
-        id: m.id,
-        threadId: otherUserId, // We use otherUserId as threadId to keep UI consistent
-        threadName: threadName,
-        sender: isMe ? "Me" : threadName,
-        text: m.text,
-        time: new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        isMe: isMe,
-        sharedPost: null
-      };
-    });
-    
-    setDirectMessages(formatted);
+      const roomIds = rooms.map(r => r.id);
+      
+      // 3. Fetch messages for these rooms
+      const { data: messages, error: msgsError } = await supabase
+        .from('messages')
+        .select('*')
+        .in('chat_room_id', roomIds)
+        .order('created_at', { ascending: true });
+        
+      if (msgsError || !messages) {
+        setDirectMessages(localMsgs);
+        return;
+      }
+      
+      // 4. Resolve other user profiles
+      const otherUserIds = new Set<string>();
+      rooms.forEach(r => {
+        r.participants?.forEach((p: string) => {
+          if (p !== user.id) otherUserIds.add(p);
+        });
+      });
+      
+      let profilesMap: Record<string, string> = {};
+      if (otherUserIds.size > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', Array.from(otherUserIds));
+        if (profiles) {
+          profiles.forEach(p => profilesMap[p.id] = p.full_name || "Unknown");
+        }
+      }
+      
+      // 5. Format remote messages
+      const remoteFormatted = messages.map(m => {
+        const room = rooms.find(r => r.id === m.chat_room_id);
+        const otherUserId = room?.participants?.find((p: string) => p !== user.id) || "unknown";
+        const isMe = m.sender_id === user.id;
+        const threadName = profilesMap[otherUserId] || "Unknown User";
+        
+        return {
+          id: m.id,
+          threadId: otherUserId,
+          threadName: threadName,
+          sender: isMe ? "Me" : threadName,
+          text: m.text,
+          time: new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+          isMe: isMe,
+          sharedPost: null,
+          created_at: m.created_at
+        };
+      });
+
+      // Merge remote messages and local messages
+      const existingIds = new Set(remoteFormatted.map(m => m.id));
+      const combined = [...remoteFormatted];
+      localMsgs.forEach(lm => {
+        if (!existingIds.has(lm.id)) {
+          combined.push(lm);
+        }
+      });
+      combined.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+      setDirectMessages(combined);
+    } catch {
+      setDirectMessages(localMsgs);
+    }
   };
 
   useEffect(() => {
@@ -515,7 +583,7 @@ export default function BuonoloApp() {
     const initialSteps = [
       { t: "Understand the requirements", d: "Open the linked tool to see the full checklist for your situation and nationality.", done: false, tool: "Registration" },
       { t: "Gather what you need", d: "Collect documents, translations and fees before booking anything — it prevents repeat visits.", done: false, tool: "Visas & Permits" },
-      { t: "Take the first official step", d: "Book the appointment / enrol / apply. Buonolo will remind you of deadlines.", done: false, tool: "Taxes & ID" },
+      { t: "Take the first official step", d: "Book the appointment / enrol / apply. Meet Peanut will remind you of deadlines.", done: false, tool: "Taxes & ID" },
       { t: "Complete & verify", d: "Confirm you received the certificate, card or confirmation — and save a copy in your documents.", done: false, tool: "Banking" },
     ];
 
@@ -612,7 +680,7 @@ export default function BuonoloApp() {
     const demoId = "44c35de8-0195-4470-97d1-aad6445abf65";
     const demoUser = {
       id: demoId,
-      email: "demo@buonolo.app",
+      email: "demo@meet-peanut.app",
       user_metadata: { full_name: "Demo User" }
     };
     await handleUserChange(demoUser);
@@ -811,52 +879,211 @@ export default function BuonoloApp() {
   };
 
   const handleShareToMessenger = (post: Post) => {
-    // Just open the messenger and pre-fill the text
-    setMessageText(`Check out this post: ${post.text.substring(0, 50)}...`);
+    setSharedPostData({ name: post.name, text: post.text });
+    setMessageText(`Check out this post: "${post.text.substring(0, 60)}..."`);
     setMessengerOpen(true);
     setActiveMessageThread(null);
   };
 
+  const handleShareGroupToMessenger = (group: any, targetThreadId?: string, targetThreadName?: string) => {
+    const inviteContent = {
+      name: group.name,
+      text: `Join the "${group.name}" community on Meet Peanut! ${group.desc || ''}`,
+      emoji: group.emoji || "🏘️",
+      isGroupInvite: true,
+      groupId: group.id
+    };
+
+    if (targetThreadId) {
+      const threadName = targetThreadName || directMessages.find(m => m.threadId === targetThreadId)?.threadName || targetThreadId;
+      const newMsg = {
+        id: "msg-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+        threadId: targetThreadId,
+        threadName: threadName,
+        sender: "Me",
+        text: `Hey! I'd love for you to join our community "${group.name}". Check it out!`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isMe: true,
+        sharedPost: inviteContent,
+        created_at: new Date().toISOString()
+      };
+
+      setDirectMessages(prev => {
+        const filtered = prev.filter(m => !(m.threadId === targetThreadId && m.isFake));
+        const updated = [...filtered, newMsg];
+        try {
+          localStorage.setItem(`meet-peanut_dm_${user?.id || 'default'}`, JSON.stringify(updated.filter(m => !m.isFake)));
+        } catch {}
+        return updated;
+      });
+
+      setTimeout(() => {
+        const replyMsg = {
+          id: "reply-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+          threadId: targetThreadId,
+          threadName: threadName,
+          sender: threadName,
+          text: `Thanks for inviting me to ${group.name}! 🎉 I'm joining right now.`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isMe: false,
+          sharedPost: null,
+          created_at: new Date().toISOString()
+        };
+        setDirectMessages(prev => {
+          const updated = [...prev, replyMsg];
+          try {
+            localStorage.setItem(`meet-peanut_dm_${user?.id || 'default'}`, JSON.stringify(updated.filter(m => !m.isFake)));
+          } catch {}
+          return updated;
+        });
+        pushNotification(`${threadName} replied to your invite`, `Thanks for inviting me to ${group.name}!`, "message");
+      }, 1400);
+
+      return true;
+    } else {
+      setSharedPostData(inviteContent);
+      setMessageText(`Hey! Check out this community: "${group.name}". Join here!`);
+      setMessengerOpen(true);
+      setActiveMessageThread(null);
+      return false;
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!messageText.trim() || !activeMessageThread || !user) return;
-    const msgText = messageText;
+    const msgText = messageText.trim();
     setMessageText("");
     
     const otherUserId = activeMessageThread;
     
-    // Check if room exists
-    let { data: rooms } = await supabase
-      .from('chat_rooms')
-      .select('id, participants')
-      .contains('participants', [user.id]);
-      
-    let roomId = rooms?.find(r => r.participants.includes(otherUserId))?.id;
+    // Resolve target thread name
+    const existingThread = directMessages.find(m => m.threadId === otherUserId && m.threadName);
+    const threadName = existingThread?.threadName || otherUserId;
     
-    if (!roomId) {
-      // Create room
-      const { data: newRoom, error: createError } = await supabase
-        .from('chat_rooms')
-        .insert({ participants: [user.id, otherUserId] })
-        .select()
-        .single();
-        
-      if (createError) {
-        console.error("Failed to create chat room", createError);
-        return;
-      }
-      roomId = newRoom.id;
-    }
+    const newMsg = {
+      id: "msg-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+      threadId: otherUserId,
+      threadName: threadName,
+      sender: "Me",
+      text: msgText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isMe: true,
+      sharedPost: sharedPostData || null,
+      created_at: new Date().toISOString()
+    };
     
-    // Insert message
-    const { error } = await supabase.from('messages').insert({
-      sender_id: user.id,
-      chat_room_id: roomId,
-      text: msgText
+    setSharedPostData(null);
+    
+    // Optimistically update React state and LocalStorage
+    setDirectMessages(prev => {
+      const filtered = prev.filter(m => !(m.threadId === otherUserId && m.isFake));
+      const updated = [...filtered, newMsg];
+      try {
+        localStorage.setItem(`meet-peanut_dm_${user.id}`, JSON.stringify(updated.filter(m => !m.isFake)));
+      } catch {}
+      return updated;
     });
-    
-    if (error) {
-      console.error("Failed to send message", error);
-      // Fallback UI update or toast
+
+    // Safely sync with Supabase if both are valid UUIDs and authenticated session matches user
+    if (isUuid(user.id) && isUuid(otherUserId)) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const session = sessionData?.session;
+        if (session && session.user?.id === user.id) {
+          let { data: rooms, error: roomFindErr } = await supabase
+            .from('chat_rooms')
+            .select('id, participants')
+            .contains('participants', [session.user.id]);
+            
+          let roomId = rooms?.find(r => r.participants?.includes(otherUserId))?.id;
+          
+          if (!roomId && !roomFindErr) {
+            const { data: newRoom, error: createError } = await supabase
+              .from('chat_rooms')
+              .insert({ participants: [session.user.id, otherUserId] })
+              .select()
+              .single();
+              
+            if (!createError && newRoom) {
+              roomId = newRoom.id;
+            } else if (createError) {
+              console.info("Using local chat session (room sync skipped):", createError.message);
+            }
+          }
+          
+          if (roomId) {
+            const { error: msgErr } = await supabase.from('messages').insert({
+              sender_id: session.user.id,
+              chat_room_id: roomId,
+              text: msgText
+            });
+            if (msgErr) {
+              console.info("Message saved locally (remote sync skipped):", msgErr.message);
+            }
+          }
+        }
+      } catch (err) {
+        console.info("Local message persisted. Supabase sync bypassed:", err);
+      }
+    }
+
+    // Interactive realistic simulated responses from community contacts
+    const simulatedReplies: Record<string, string[]> = {
+      "Sarah Miller": [
+        "Hey! Thanks for reaching out! How has your move to the city been going?",
+        "Hi there! Berlin has been wonderful. Let me know if you need any tips on registration appointments or good bakeries!",
+        "Great to hear from you! Would love to meet up for a coffee at Central Cafe sometime."
+      ],
+      "Ahmed Khan": [
+        "Hello! Welcome to the community! How are things going with your paperwork?",
+        "Hey! If you need any tips with tax forms or finding a tech meetup, happy to help!",
+        "Glad you reached out! Hope your first few weeks here have been smooth."
+      ],
+      "Elena Rossi": [
+        "Ciao! Nice to connect with you! Which neighborhood are you staying in?",
+        "Hello! Hope you're enjoying the city so far. Let me know if you need any local food recommendations!",
+        "Hey! Always happy to connect with fellow expats. Let's catch up soon!"
+      ],
+      "Carlos Ramos": [
+        "¡Hola! Great to connect. Welcome to the neighborhood! Let me know if you need any pointers around here.",
+        "Hey neighbor! Feel free to ask if you need help finding anything locally around Mitte or Prenzlauer Berg!"
+      ],
+      "Ananya Sharma": [
+        "Hi! Wonderful to meet you. Hope you're settling in nicely!",
+        "Hello! Great to connect on Meet Peanut. Let me know if you'd like to join our upcoming weekend meetup!"
+      ],
+      "Liam Vance": [
+        "Hey mate! Welcome to town. Always good to meet newcomers around here!",
+        "Hi! How are you finding everything so far? The local expat community is really welcoming."
+      ]
+    };
+
+    if (simulatedReplies[threadName]) {
+      setTimeout(() => {
+        const pool = simulatedReplies[threadName];
+        const replyText = pool[Math.floor(Math.random() * pool.length)];
+        const replyMsg = {
+          id: "reply-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6),
+          threadId: otherUserId,
+          threadName: threadName,
+          sender: threadName,
+          text: replyText,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isMe: false,
+          sharedPost: null,
+          created_at: new Date().toISOString()
+        };
+
+        setDirectMessages(prev => {
+          const updated = [...prev, replyMsg];
+          try {
+            localStorage.setItem(`meet-peanut_dm_${user.id}`, JSON.stringify(updated.filter(m => !m.isFake)));
+          } catch {}
+          return updated;
+        });
+
+        pushNotification(`${threadName} sent a message`, replyText, "message");
+      }, 1200);
     }
   };
 
@@ -877,7 +1104,13 @@ export default function BuonoloApp() {
           messages: currentMessages.filter(m => m.id !== "b1"), // don't send the first hardcoded message as it doesn't fit standard pattern easily or just send it if we want
           userOrigin: profile?.origin,
           userHost: profile?.host,
-          userCity: profile?.city
+          userCity: profile?.city,
+          activeTab: tab,
+          appContext: {
+            goals: goals,
+            notifications: notifications,
+            activeCommunities: communitiesData.filter((c: any) => c.joined)
+          }
         })
       });
 
@@ -885,16 +1118,17 @@ export default function BuonoloApp() {
       
       const data = await response.json();
       
-      setBotMessages(prev => [...prev, { id: "br-" + Date.now(), sender: "Mr O", text: data.text, time: "Now", isMe: false }]);
+      setBotMessages(prev => [...prev, { id: "br-" + Date.now(), sender: "Peanut", text: data.text, time: "Now", isMe: false }]);
     } catch (error) {
       console.error("Chat error:", error);
-      setBotMessages(prev => [...prev, { id: "br-" + Date.now(), sender: "Mr O", text: "Sorry, I am having trouble connecting to the server.", time: "Now", isMe: false }]);
+      setBotMessages(prev => [...prev, { id: "br-" + Date.now(), sender: "Peanut", text: "Sorry, I am having trouble connecting to the server.", time: "Now", isMe: false }]);
     } finally {
       setBotLoading(false);
     }
   };
 
-  const NAV = [["home", Home, "Home"], ["roadmap", Map, "Roadmap"], ["community", Users, "Community"], ["tools", Wrench, "Tools"], ["me", User, "Me"]];
+  const NavPeanut = (props: any) => <PeanutLogo {...props} monochrome />;
+  const NAV = [["home", Home, "Home"], ["community", Users, "Community"], ["bot", NavPeanut, "Ask Peanut"], ["tools", Wrench, "Tools"], ["me", User, "Me"]];
 
   return (
     <div className={`min-h-screen ${T.bg} bodyf transition-colors duration-300 no-scrollbar`}>
@@ -953,16 +1187,26 @@ export default function BuonoloApp() {
               user={user}
               T={T} 
               onRefreshGroups={fetchGroups}
-              onStartChat={async (id) => {
+              onShareGroupToMessenger={handleShareGroupToMessenger}
+              directMessages={directMessages}
+              onStartChat={async (id, name) => {
                 setActiveMessageThread(id);
                 setMessengerOpen(true);
-                const { data } = await supabase.from('profiles').select('full_name').eq('id', id).single();
-                if (data && data.full_name) {
-                  setDirectMessages(prev => {
-                    if (prev.some(m => m.threadId === id)) return prev;
-                    return [...prev, { id: 'temp-' + id, threadId: id, threadName: data.full_name, isFake: true, text: '' }];
-                  });
+                let threadName = name;
+                if (!threadName && isUuid(id)) {
+                  try {
+                    const { data } = await supabase.from('profiles').select('full_name').eq('id', id).single();
+                    if (data?.full_name) threadName = data.full_name;
+                  } catch {}
                 }
+                if (!threadName) {
+                  const found = DUMMY_PEOPLE.find(p => p.id === id || p.name === id);
+                  threadName = found?.name || id;
+                }
+                setDirectMessages(prev => {
+                  if (prev.some(m => m.threadId === id)) return prev;
+                  return [...prev, { id: 'temp-' + id, threadId: id, threadName: threadName || id, isFake: true, text: '' }];
+                });
               }}
             />
           )}

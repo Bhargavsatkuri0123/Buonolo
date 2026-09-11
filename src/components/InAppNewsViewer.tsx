@@ -65,7 +65,7 @@ export const InAppNewsViewer: React.FC<InAppNewsViewerProps> = ({
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeError, setIframeError] = useState(false);
 
-  const fallbackUrl = article.url || `https://local-news.buonolo.app/${article.tag.toLowerCase()}/${article.id}`;
+  const fallbackUrl = article.url || `https://local-news.meet-peanut.app/${article.tag.toLowerCase()}/${article.id}`;
   const hostDomain = (() => {
     try {
       const parsed = new URL(fallbackUrl);
@@ -116,7 +116,7 @@ export const InAppNewsViewer: React.FC<InAppNewsViewerProps> = ({
     : [
         article.body,
         `Local community authorities and municipal departments emphasize the importance of this update for all residents and recent newcomers. Continued service enhancements are planned over the coming quarters to ensure seamless community integration and reliable city resources.`,
-        `Residents are encouraged to consult local community advice centers, review official notices, and connect with peer groups through the Buonolo Community tab to exchange experiences and ask questions directly.`
+        `Residents are encouraged to consult local community advice centers, review official notices, and connect with peer groups through the Meet Peanut Community tab to exchange experiences and ask questions directly.`
       ];
 
   const highlights = article.highlights && article.highlights.length > 0
@@ -246,7 +246,7 @@ export const InAppNewsViewer: React.FC<InAppNewsViewerProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`text-xs font-bold ${T.text} truncate`}>
-                  {article.author || "Buonolo Local News Desk"}
+                  {article.author || "Meet Peanut Local News Desk"}
                 </p>
                 <p className={`text-[11px] ${T.sub} flex items-center gap-1 truncate`}>
                   <Globe size={11} />

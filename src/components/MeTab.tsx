@@ -382,7 +382,7 @@ export const MeTab = ({
         <h3 className={`font-bold ${T.text}`}>1. Data We Collect</h3>
         <p className={`text-sm ${T.sub} leading-relaxed`}>We collect information you provide directly to us, such as your profile details (name, origin, host country), posts, and interactions within the community.</p>
         <h3 className={`font-bold ${T.text}`}>2. How We Use Data</h3>
-        <p className={`text-sm ${T.sub} leading-relaxed`}>Your data is used to provide personalized migration guides, connect you with local communities, and improve the Buonolo experience.</p>
+        <p className={`text-sm ${T.sub} leading-relaxed`}>Your data is used to provide personalized migration guides, connect you with local communities, and improve the Meet Peanut experience.</p>
         <h3 className={`font-bold ${T.text}`}>3. Data Sharing</h3>
         <p className={`text-sm ${T.sub} leading-relaxed`}>We do not sell your personal data. Some information (like your public posts) is visible to other users of the platform based on your privacy settings.</p>
         <h3 className={`font-bold ${T.text}`}>4. Your Rights</h3>
@@ -396,13 +396,13 @@ export const MeTab = ({
       <Header T={T} title="Terms of Service" back={() => setMeScreen("about")} />
       <div className={`${T.card} mx-4 rounded-2xl p-6 space-y-4 overflow-y-auto no-scrollbar max-h-[70vh]`}>
         <h3 className={`font-bold ${T.text}`}>1. Acceptance of Terms</h3>
-        <p className={`text-sm ${T.sub} leading-relaxed`}>By using Buonolo, you agree to be bound by these terms. If you do not agree, please do not use the service.</p>
+        <p className={`text-sm ${T.sub} leading-relaxed`}>By using Meet Peanut, you agree to be bound by these terms. If you do not agree, please do not use the service.</p>
         <h3 className={`font-bold ${T.text}`}>2. User Conduct</h3>
-        <p className={`text-sm ${T.sub} leading-relaxed`}>You agree to use Buonolo in a way that is respectful to others. Harassment, hate speech, and illegal activities are strictly prohibited.</p>
+        <p className={`text-sm ${T.sub} leading-relaxed`}>You agree to use Meet Peanut in a way that is respectful to others. Harassment, hate speech, and illegal activities are strictly prohibited.</p>
         <h3 className={`font-bold ${T.text}`}>3. Content Ownership</h3>
         <p className={`text-sm ${T.sub} leading-relaxed`}>You retain ownership of the content you post, but you grant us a license to display it on the platform.</p>
         <h3 className={`font-bold ${T.text}`}>4. Limitation of Liability</h3>
-        <p className={`text-sm ${T.sub} leading-relaxed`}>Buonolo is provided "as is". We are not responsible for any losses or damages resulting from your use of the service.</p>
+        <p className={`text-sm ${T.sub} leading-relaxed`}>Meet Peanut is provided "as is". We are not responsible for any losses or damages resulting from your use of the service.</p>
       </div>
     </div>
   );
@@ -412,7 +412,7 @@ export const MeTab = ({
       <Header T={T} title="About" back={() => setMeScreen("root")} />
       <div className={`${T.card} mx-4 rounded-2xl p-6 text-center`}>
         <div className="flex flex-col items-center gap-3 mb-3"><AppIcon size={72} /><Logo /></div>
-        <p className={`text-sm ${T.sub} leading-relaxed`}>Buonolo helps people who've moved abroad settle in with confidence — guided goals, local tools, and a community that's been there.</p>
+        <p className={`text-sm ${T.sub} leading-relaxed`}>Meet Peanut helps people who've moved abroad settle in with confidence — guided goals, local tools, and a community that's been there.</p>
         <p className={`text-xs mt-4 ${T.sub}`}>Version 0.9.2 (build 148)</p>
         <p className={`text-xs mt-1 ${T.sub}`}>© 2026 Pearwave Technologies Ltd</p>
       </div>
@@ -421,7 +421,7 @@ export const MeTab = ({
           ["Terms of service", () => setMeScreen("termsOfService")], 
           ["Privacy policy", () => setMeScreen("privacyPolicy")], 
           ["Open-source licences", () => {}], 
-          ["Rate Buonolo", () => {}], 
+          ["Rate Meet Peanut", () => {}], 
           ["Contact support", () => {}]
         ].map(([x, fn]: any) => (
           <button key={x} onClick={fn} className="flex items-center justify-between w-full p-4">
@@ -438,56 +438,129 @@ export const MeTab = ({
     const [selectedEvent, setSelectedEvent] = useState<any>(null);
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [notifyEvents, setNotifyEvents] = useState(() => {
+      try { return localStorage.getItem("me_notify_events") !== "false"; } catch { return true; }
+    });
+    const [notifyMessages, setNotifyMessages] = useState(() => {
+      try { return localStorage.getItem("me_notify_messages") !== "false"; } catch { return true; }
+    });
 
     if (selectedUser) {
-      return <UserView user={selectedUser} onClose={() => setSelectedUser(null)} T={T} onGroupClick={setSelectedGroup} />;
-    }
-
-    if (selectedEvent) {
-      return <EventView event={selectedEvent} onClose={() => setSelectedEvent(null)} T={T} onUserClick={setSelectedUser} />;
-    }
-
-    if (selectedGroup) {
-      return <GroupView group={selectedGroup} onClose={() => setSelectedGroup(null)} T={T} onUserClick={setSelectedUser} onEventClick={setSelectedEvent} />;
-    }
-
-    if (showSettings) {
       return (
-        <div className="pb-24">
-          <Header T={T} title="Community Settings" back={() => setShowSettings(false)} />
-          <div className={`${T.card} mx-4 mt-4 rounded-2xl p-4 space-y-4`}>
-            <div>
-              <p className={`text-sm font-bold ${T.text}`}>Notifications</p>
-              <div className="flex justify-between items-center mt-3">
-                <p className={`text-sm ${T.sub}`}>New events in my groups</p>
-                <div className="w-10 h-6 bg-orange-500 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div></div>
-              </div>
-              <div className="flex justify-between items-center mt-3">
-                <p className={`text-sm ${T.sub}`}>Group messages</p>
-                <div className="w-10 h-6 bg-orange-500 rounded-full relative"><div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div></div>
-              </div>
-            </div>
-            <div className={`border-t ${T.line} pt-4`}>
-              <p className={`text-sm font-bold text-red-500`}>Leave all groups</p>
-            </div>
-          </div>
-        </div>
+        <UserView 
+          user={selectedUser} 
+          onClose={() => setSelectedUser(null)} 
+          T={T} 
+          onGroupClick={setSelectedGroup} 
+          groups={communitiesData} 
+        />
       );
     }
 
+    if (selectedEvent) {
+      return (
+        <EventView 
+          event={selectedEvent} 
+          onClose={() => setSelectedEvent(null)} 
+          T={T} 
+          onUserClick={setSelectedUser} 
+          user={user} 
+        />
+      );
+    }
+
+    if (selectedGroup) {
+      return (
+        <GroupView 
+          group={selectedGroup} 
+          onClose={() => setSelectedGroup(null)} 
+          T={T} 
+          onUserClick={setSelectedUser} 
+          onEventClick={setSelectedEvent} 
+          user={user}
+          profile={profile}
+        />
+      );
+    }
+
+    const handleLeaveAllGroups = async () => {
+      if (confirm("Are you sure you want to leave all joined communities?")) {
+        if (user) {
+          await supabase.from("group_members").delete().eq("user_id", user.id);
+        }
+        setShowSettings(false);
+        setMeScreen("root");
+      }
+    };
+
     return (
       <div className="pb-24">
-        <Header T={T} title="Communities" back={() => setMeScreen("root")} right={<button onClick={() => setShowSettings(true)} className={`p-2 rounded-full ${T.card}`}><Settings size={18} className={T.text} /></button>} />
-        {communitiesData.map(c => (
-          <div key={c.name} onClick={() => setSelectedGroup(c)} className={`${T.card} mx-4 mb-2 rounded-2xl p-4 flex items-center gap-3 cursor-pointer`}>
-            <span className="text-2xl">{c.emoji}</span>
-            <div className="flex-1">
-              <p className={`text-sm font-semibold ${T.text}`}>{c.name}</p>
-              <p className={`text-xs ${T.sub}`}>{c.members} members</p>
+        {showSettings ? (
+          <div>
+            <Header T={T} title="Community Settings" back={() => setShowSettings(false)} />
+            <div className={`${T.card} mx-4 mt-4 rounded-2xl p-4 space-y-4 shadow-sm border border-orange-100 dark:border-zinc-800`}>
+              <div>
+                <p className={`text-xs font-bold uppercase tracking-wider ${T.sub}`}>Notifications</p>
+                <div className="flex justify-between items-center mt-3">
+                  <div>
+                    <p className={`text-sm font-semibold ${T.text}`}>New events in my groups</p>
+                    <p className={`text-xs ${T.sub}`}>Updates when meetups are created</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const next = !notifyEvents;
+                      setNotifyEvents(next);
+                      localStorage.setItem("me_notify_events", String(next));
+                    }}
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${notifyEvents ? "bg-orange-500" : "bg-slate-300 dark:bg-zinc-700"}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${notifyEvents ? "right-1" : "left-1"}`} />
+                  </button>
+                </div>
+                <div className="flex justify-between items-center mt-4 pt-3 border-t border-orange-50 dark:border-zinc-800">
+                  <div>
+                    <p className={`text-sm font-semibold ${T.text}`}>Group messages & replies</p>
+                    <p className={`text-xs ${T.sub}`}>Discussion alerts</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const next = !notifyMessages;
+                      setNotifyMessages(next);
+                      localStorage.setItem("me_notify_messages", String(next));
+                    }}
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${notifyMessages ? "bg-orange-500" : "bg-slate-300 dark:bg-zinc-700"}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${notifyMessages ? "right-1" : "left-1"}`} />
+                  </button>
+                </div>
+              </div>
+              <div className={`border-t ${T.line} pt-4`}>
+                <button 
+                  onClick={handleLeaveAllGroups}
+                  className="text-sm font-bold text-red-500 hover:text-red-600 transition-colors cursor-pointer w-full text-left"
+                >
+                  Leave all groups
+                </button>
+              </div>
             </div>
-            <ChevronRight size={16} className={T.sub} />
           </div>
-        ))}
+        ) : (
+          <div>
+            <Header T={T} title="Communities" back={() => setMeScreen("root")} right={<button onClick={() => setShowSettings(true)} className={`p-2 rounded-full ${T.card}`} title="Community Settings"><Settings size={18} className={T.text} /></button>} />
+            <div className="mx-4 space-y-2 mt-2">
+              {communitiesData.map(c => (
+                <div key={c.name} onClick={() => setSelectedGroup(c)} className={`${T.card} rounded-2xl p-4 flex items-center gap-3 cursor-pointer shadow-sm border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}>
+                  <span className="text-2xl">{c.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${T.text} truncate`}>{c.name}</p>
+                    <p className={`text-xs ${T.sub}`}>{c.members} members</p>
+                  </div>
+                  <ChevronRight size={16} className={T.sub} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -669,7 +742,7 @@ const EditProfileScreen = () => {
           [Users, "My communities", "3 joined", () => setMeScreen("communities")],
           [Bookmark, "Saved posts & guides", "", () => setMeScreen("saved")],
           [Settings, "Settings", "Language, theme, notifications", () => setMeScreen("settings")],
-          [Info, "About Buonolo", "v0.9.2", () => setMeScreen("about")],
+          [Info, "About Meet Peanut", "v0.9.2", () => setMeScreen("about")],
           [LogOut, "Log Out", "", handleLogout]
         ].map(([Icon, label, sub, fn]: any) => (
           <button key={label as string} onClick={fn} className="flex items-center gap-3 w-full p-4 text-left">

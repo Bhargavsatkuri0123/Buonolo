@@ -13,11 +13,18 @@ async function startServer() {
 
   app.post('/api/chat', async (req, res) => {
     try {
-      const { messages, userOrigin, userHost, userCity } = req.body;
+      const { messages, userOrigin, userHost, userCity, activeTab, appContext } = req.body;
       
-      const systemInstruction = `You are Mr O, a helpful and friendly immigration assistant.
+      const systemInstruction = `You are Peanut, a highly helpful, personal, and friendly immigration AI assistant.
 You help immigrants settling in from ${userOrigin || "their home country"} to ${userCity || "their new city"}, ${userHost || "their new country"}.
-Provide clear, concise, and helpful advice about immigration, settling in, finding housing, jobs, local culture, and navigating the new environment.`;
+Provide clear, concise, and helpful advice about immigration, settling in, finding housing, jobs, local culture, and navigating the new environment.
+
+Crucially, you are a PERSONAL assistant directly integrated into this app. You are aware of all activities of the user. 
+The user is currently looking at the '${activeTab || 'unknown'}' tab of the application.
+Here is some context about their current state and tasks within the app:
+${JSON.stringify(appContext || {}, null, 2)}
+
+Act as a proactive guide, pulling details from their context, and guiding them during their tasks in completing processes (like their goals/roadmaps). Do not just answer generally, relate it back to their specific context and goals when relevant. Keep responses concise and formatted nicely for a chat interface.`;
 
       const formattedMessages = messages.map((m: any) => ({
         role: m.sender === 'Me' ? 'user' : 'model',
@@ -28,11 +35,11 @@ Provide clear, concise, and helpful advice about immigration, settling in, findi
         model: "gemini-2.5-flash",
         contents: formattedMessages,
         config: {
-          systemInstruction: { parts: [{ text: systemInstruction }] },
+          systemInstruction: systemInstruction,
           temperature: 0.7,
         }
       });
-
+      
       res.json({ text: response.text });
     } catch (error) {
       console.error("Gemini Error:", error);

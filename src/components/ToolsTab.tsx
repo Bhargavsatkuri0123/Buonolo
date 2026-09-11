@@ -724,7 +724,32 @@ export const ToolsTab = ({ openTool, setOpenTool, toolSectionsData, profile, eme
         <div key={sec.label} className="mb-5">
           <p className={`mx-4 mb-2.5 text-xs font-bold uppercase tracking-wider ${T.sub}`}>{sec.label}</p>
           <div className="mx-4 grid grid-cols-2 gap-2.5">
-            {sec.items.map((it: any) => (
+            {sec.items.map((it: any) => {
+              if (it.name === "Roadmaps") {
+                return (
+                  <button 
+                    key={it.name} 
+                    onClick={() => setTab("roadmap")} 
+                    className={`col-span-2 relative overflow-hidden bg-orange-50 dark:bg-orange-500/10 rounded-2xl p-4 text-left cardin border border-orange-200 dark:border-orange-500/20 transition-all hover:shadow-md active:scale-95 group flex flex-row items-center justify-between`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${it.gradient || 'from-orange-400 to-orange-600'} flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}>
+                        {it.icon && typeof it.icon !== 'string' ? <it.icon size={24} className="text-white" /> : <Wrench size={24} className="text-white" />}
+                      </div>
+                      <div>
+                        <p className={`text-sm font-extrabold leading-tight text-orange-900 dark:text-orange-100`}>{it.name}</p>
+                        <p className={`text-[10px] mt-1 leading-normal text-orange-700 dark:text-orange-300 opacity-80`}>{it.desc}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end justify-center gap-1">
+                       <span className="text-[10px] font-bold px-2 py-1 rounded-full text-orange-700 bg-orange-200 dark:bg-orange-500/30 dark:text-orange-200 whitespace-nowrap">View Plan</span>
+                       <ChevronRight size={14} className="text-orange-500 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </button>
+                );
+              }
+              
+              return (
               <button 
                 key={it.name} 
                 onClick={() => setOpenTool(it.name)} 
@@ -753,7 +778,7 @@ export const ToolsTab = ({ openTool, setOpenTool, toolSectionsData, profile, eme
                   <ChevronRight size={12} className={`${T.sub} group-hover:translate-x-0.5 transition-transform`} />
                 </div>
               </button>
-            ))}
+            )})}
           </div>
         </div>
       ))}
