@@ -4,10 +4,10 @@ WORKDIR /app
 # so this has to be a build arg rather than a docker-compose environment var.
 ARG VITE_GOOGLE_CLIENT_ID=
 ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
-COPY web/package.json web/package-lock.json* ./
+COPY package.json package-lock.json* ./
 RUN npm install
-COPY web/ ./
-RUN npm run build
+COPY . .
+RUN npx vite build
 
 FROM nginx:1.27-alpine
 # nginx.conf (default, local dev) has no SSO gate; nginx.qa.conf adds the
