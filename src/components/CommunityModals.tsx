@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Theme, Profile } from "../types";
-import { DUMMY_PEOPLE } from "../constants";
 import { api } from "../api";
 
 interface CommunityRolesModalProps {
@@ -298,18 +297,6 @@ export const CommunityInviteModal = ({
       }
     });
 
-    // 2. Supplement with app contacts from DUMMY_PEOPLE
-    DUMMY_PEOPLE.forEach(p => {
-      if (!list.some(item => item.name === p.name || item.id === p.id)) {
-        list.push({
-          id: p.id,
-          name: p.name,
-          subtitle: `${p.origin || "Expat"} · In your city`,
-          avatar: p.avatar
-        });
-      }
-    });
-
     return list;
   })();
 
@@ -367,19 +354,10 @@ export const CommunityInviteModal = ({
     setIsSearching(true);
     try {
       const { users } = await api.users.search(query.trim());
-      if (users && users.length > 0) {
-        setSearchResults(users.map(u => ({ id: u.id, full_name: u.fullName, origin: u.origin })));
-      } else {
-        // Fallback filter dummy people
-        const matching = DUMMY_PEOPLE.filter(p =>
-          p.name.toLowerCase().includes(query.toLowerCase()) ||
-          p.origin.toLowerCase().includes(query.toLowerCase())
-        );
-        setSearchResults(matching.map(p => ({ id: p.id, full_name: p.name, origin: p.origin })));
-      }
-    } catch {
-      const matching = DUMMY_PEOPLE.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
-      setSearchResults(matching.map(p => ({ id: p.id, full_name: p.name, origin: p.origin })));
+      setSearchResults(users.map(u => ({ id: u.id, full_name: u.fullName, origin: u.origin })));
+    } catch (e) {
+      console.error("Failed to search users", e);
+      setSearchResults([]);
     }
     setIsSearching(false);
   };

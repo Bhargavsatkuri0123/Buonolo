@@ -12,14 +12,6 @@ import { LikeButton } from "./LikeButton";
 import { CommentSection } from "./CommentSection";
 import { CommunityRolesModal, CommunityInviteModal } from "./CommunityModals";
 import { Theme, Profile } from "../types";
-import { 
-  GENERATE_DUMMY_COMMUNITIES, 
-  GENERATE_DUMMY_EVENTS, 
-  GENERATE_DUMMY_PEOPLE, 
-  DUMMY_COMMUNITIES, 
-  DUMMY_EVENTS, 
-  DUMMY_PEOPLE 
-} from "../constants";
 import { api } from "../api";
 import { wsClient } from "../ws";
 
@@ -237,14 +229,7 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
     showToast("Opening calendar...");
   };
 
-  const fullAttendeesList = selectedEvent.attendeesList && selectedEvent.attendeesList.length > 0 
-    ? selectedEvent.attendeesList 
-    : [
-        { user_id: "u1", user_name: "Alex Rivera", origin: "Spain" },
-        { user_id: "u2", user_name: "Maya Chen", origin: "Taiwan" },
-        { user_id: "u3", user_name: "Lukas Schmidt", origin: "Germany" },
-        { user_id: "u4", user_name: "Sarah Miller", origin: "USA" }
-      ];
+  const fullAttendeesList = selectedEvent.attendeesList || [];
 
   const filteredAttendees = fullAttendeesList.filter((a: any) => 
     (a.user_name || "").toLowerCase().includes(attendeeSearch.toLowerCase())
@@ -542,60 +527,36 @@ export const GroupView = ({
   const fetchMembers = async () => {
     try {
       const { group: fullGroup } = await api.groups.get(group.id);
-      if (fullGroup.members && fullGroup.members.length > 0) {
-        setActualMembers(fullGroup.members.map((m: any) => ({
-          id: m.id,
-          name: m.fullName || "Community Member",
-          role: m.role === "admin" ? "Admin" : (m.id === creatorId ? "Creator" : "Member")
-        })));
-        setMembersCount(fullGroup.members.length);
-        return;
-      }
+      const members = fullGroup.members || [];
+      setActualMembers(members.map((m: any) => ({
+        id: m.id,
+        name: m.fullName || "Community Member",
+        role: m.role === "admin" ? "Admin" : (m.id === creatorId ? "Creator" : "Member")
+      })));
+      setMembersCount(members.length);
     } catch (e) {
       console.error("Failed to load members", e);
+      setActualMembers([]);
     }
-    // Fallback default members with role clarity
-    setActualMembers([
-      { id: creatorId, name: creatorName, role: "Creator" },
-      { id: "p2", name: "Ahmed Khan", role: "Admin" },
-      { id: "p3", name: "Elena Rossi", role: "Member" },
-      { id: profile?.name || "m2", name: profile?.name || "You", role: "Member" },
-      { id: "m3", name: "Sophie Taylor", role: "Member" }
-    ]);
   };
 
   const fetchUpdates = async () => {
     try {
       const { updates } = await api.groups.updates(group.id);
-      if (updates && updates.length > 0) {
-        setPosts(updates.map((u: any) => ({
-          id: u.id,
-          author_id: u.author?.id,
-          user: { name: u.author?.fullName || "Member" },
-          text: u.content,
-          time: new Date(u.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-          likes: 0,
-          liked: false,
-          comments: 0
-        })));
-        return;
-      }
+      setPosts((updates || []).map((u: any) => ({
+        id: u.id,
+        author_id: u.author?.id,
+        user: { name: u.author?.fullName || "Member" },
+        text: u.content,
+        time: new Date(u.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        likes: 0,
+        liked: false,
+        comments: 0
+      })));
     } catch (e) {
       console.error("Failed to load group updates", e);
+      setPosts([]);
     }
-    // Default welcome post
-    setPosts([
-        {
-          id: `welcome_${group.id}`,
-          author_id: creatorId,
-          user: { name: creatorName },
-          text: `Welcome everyone to ${group.name}! 🎉 Feel free to introduce yourself, share tips, or suggest a weekend meetup.`,
-          time: "Pinned",
-          likes: 5,
-          liked: false,
-          comments: 1
-        }
-      ]);
   };
 
   // Promote Member to Admin (Multi-Admins Capability)
@@ -1484,8 +1445,8 @@ export const CommunityTab = ({
   directMessages
 }: CommunityTabProps) => {
   const [data, setData] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>(DUMMY_EVENTS);
-  const [people, setPeople] = useState<any[]>(DUMMY_PEOPLE);
+  const [events, setEvents] = useState<any[]>([]);
+  const [people, setPeople] = useState<any[]>([]);
   const [invites, setInvites] = useState<any[]>([]);
   
   // Search & Filtering States
@@ -1505,7 +1466,6 @@ export const CommunityTab = ({
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
   const [showAllYourGroupsModal, setShowAllYourGroupsModal] = useState(false);
-  const [showRadarModal, setShowRadarModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Group Creation States
@@ -1580,10 +1540,7 @@ export const CommunityTab = ({
     } catch (e) {
       console.error("Failed to load communities", e);
     }
-    const o = profile?.origin || "USA";
-    const c = profile?.city || "Berlin";
-    const h = profile?.host || "Germany";
-    setData(GENERATE_DUMMY_COMMUNITIES(o, c, h));
+    setData([]);
   };
 
   const fetchEvents = async () => {
@@ -1601,10 +1558,7 @@ export const CommunityTab = ({
     } catch (e) {
       console.error("Failed to load events", e);
     }
-    const o = profile?.origin || "USA";
-    const c = profile?.city || "Berlin";
-    const h = profile?.host || "Germany";
-    setEvents(GENERATE_DUMMY_EVENTS(o, c, h));
+    setEvents([]);
   };
 
   const fetchPeople = async () => {
@@ -1624,10 +1578,7 @@ export const CommunityTab = ({
     } catch (e) {
       console.error("Failed to load people", e);
     }
-    const o = profile?.origin || "USA";
-    const c = profile?.city || "Berlin";
-    const h = profile?.host || "Germany";
-    setPeople(GENERATE_DUMMY_PEOPLE(o, c, h));
+    setPeople([]);
   };
 
   const handleJoinGroup = async (groupId: string) => {
@@ -2116,23 +2067,6 @@ export const CommunityTab = ({
       {/* PEOPLE TAB */}
       {activeCommunityTab === "people" && (
         <div className="mx-4 space-y-3.5 cardin">
-          {/* Expats Nearby Radar Card */}
-          <div className={`p-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md flex items-center gap-3.5`}>
-            <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0">
-              <Compass size={22} className="animate-spin-slow" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white leading-tight">Expats in {profile.city}</p>
-              <p className="text-xs text-orange-100 mt-0.5 truncate">Discover newcomers & neighbors nearby</p>
-            </div>
-            <button 
-              onClick={() => setShowRadarModal(true)}
-              className="bg-white text-orange-600 hover:bg-orange-50 text-xs font-bold px-3.5 py-1.5 rounded-full shadow-sm active:scale-95 transition-all shrink-0"
-            >
-              Radar
-            </button>
-          </div>
-
           {/* People Filter Chips */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {["All", `In ${profile.city}`, `From ${profile.origin}`].map(filter => (
@@ -2208,60 +2142,6 @@ export const CommunityTab = ({
                     <p className={`text-[10px] ${T.sub}`}>{c.members} members</p>
                   </div>
                   <ChevronRight size={15} className={T.sub} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Neighborhood Radar */}
-      {showRadarModal && (
-        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className={`w-full max-w-sm ${T.bg} rounded-3xl overflow-hidden cardin flex flex-col max-h-[85vh]`}>
-            <div className="p-4 border-b border-orange-100 dark:border-zinc-800 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Compass size={18} className="text-orange-500" />
-                <h3 className={`text-base font-bold ${T.text}`}>{profile.city} Community Radar</h3>
-              </div>
-              <button onClick={() => setShowRadarModal(false)} className={T.sub}><X size={20} /></button>
-            </div>
-            <div className="p-4 bg-orange-500/10 dark:bg-zinc-900 flex items-center justify-center py-6 border-b border-orange-100 dark:border-zinc-800">
-              <div className="relative w-28 h-28 flex items-center justify-center">
-                <div className="absolute inset-0 rounded-full border border-orange-500/20 animate-ping" />
-                <div className="absolute inset-3 rounded-full border border-orange-500/40" />
-                <div className="absolute inset-7 rounded-full border border-orange-500/60" />
-                <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs shadow-md">
-                  You
-                </div>
-              </div>
-            </div>
-            <div className="p-4 space-y-2.5 overflow-y-auto flex-1 no-scrollbar">
-              <p className={`text-[11px] font-bold uppercase tracking-wider ${T.sub} mb-1`}>Active nearby</p>
-              {[
-                { name: "Carlos Ramos", dist: "0.8 km away", area: "Mitte", origin: "Spain" },
-                { name: "Ananya Sharma", dist: "1.4 km away", area: "Prenzlauer Berg", origin: "India" },
-                { name: "Liam Vance", dist: "2.1 km away", area: "Kreuzberg", origin: "UK" },
-                { name: "Elena Rossi", dist: "2.9 km away", area: "Friedrichshain", origin: "Italy" }
-              ].map((p, i) => (
-                <div 
-                  key={i} 
-                  className={`flex items-center gap-3 p-3 rounded-2xl ${T.card2} hover:border-orange-500 transition-all`}
-                >
-                  <Avatar name={p.name} size={9} />
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-bold ${T.text} truncate`}>{p.name}</p>
-                    <p className={`text-[10px] text-orange-600 font-semibold`}>{p.dist} · {p.area}</p>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setShowRadarModal(false);
-                      onStartChat ? onStartChat(p.name.toLowerCase().replace(/\s+/g, '-'), p.name) : showToast(`Connecting with ${p.name}...`);
-                    }}
-                    className="bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-sm shrink-0"
-                  >
-                    Say Hi
-                  </button>
                 </div>
               ))}
             </div>

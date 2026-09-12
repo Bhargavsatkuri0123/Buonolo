@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Plus, X, Check, Wrench, ChevronRight, Flag, Trophy, Target, Trash2 } from "lucide-react";
 import { Header } from "./Header";
 import { Goal, Theme, Profile } from "../types";
-import { GENERATE_GOAL_TEMPLATES } from "../constants";
 
 interface RoadmapTabProps {
   goals: Goal[];
@@ -16,6 +15,7 @@ interface RoadmapTabProps {
   profile: Profile;
   T: Theme;
   user?: any;
+  goalTemplates?: any[];
   onToggleStep?: (gid: string, i: number) => void;
   onAddGoal?: (tpl: any) => void;
   onAddCustomGoal?: (title: string) => void;
@@ -25,7 +25,7 @@ interface RoadmapTabProps {
 
 export const RoadmapTab = ({
   goals, setGoals, openGoal, setOpenGoal, showTemplates, setShowTemplates,
-  setTab, setOpenTool, profile, T, user,
+  setTab, setOpenTool, profile, T, user, goalTemplates = [],
   onToggleStep, onAddGoal, onAddCustomGoal, onAddTask, onDeleteGoal
 }: RoadmapTabProps) => {
   const [localCustomGoalTitle, setLocalCustomGoalTitle] = useState("");
@@ -47,13 +47,8 @@ export const RoadmapTab = ({
       return;
     }
     setGoals(gs => [...gs, {
-      id: "g" + Date.now(), title: tpl.title, cat: tpl.cat, icon: tpl.icon,
-      steps: [
-        { t: "Understand the requirements", d: "Open the linked tool to see the full checklist for your situation and nationality.", done: false, tool: "Registration" },
-        { t: "Gather what you need", d: "Collect documents, translations and fees before booking anything — it prevents repeat visits.", done: false, tool: "Visas & Permits" },
-        { t: "Take the first official step", d: "Book the appointment / enrol / apply. Meet Peanut will remind you of deadlines.", done: false, tool: "Taxes & ID" },
-        { t: "Complete & verify", d: "Confirm you received the certificate, card or confirmation — and save a copy in your documents.", done: false, tool: "Banking" },
-      ],
+      id: "g" + Date.now(), title: tpl.title, cat: tpl.cat, icon: tpl.icon || Target,
+      steps: [{ t: "Get started", d: "Break this goal down into your first milestone.", done: false, tool: "" }],
     }]);
     setShowTemplates(false);
   };
@@ -358,15 +353,17 @@ export const RoadmapTab = ({
               <h2 className={`disp font-bold text-lg ${T.text}`}>Choose a goal</h2>
               <button onClick={() => setShowTemplates(false)}><X size={20} className={T.sub} /></button>
             </div>
-            <p className={`text-xs ${T.sub} mb-4 shrink-0`}>Curated for newcomers in Germany. Each comes with a step-by-step guided plan.</p>
-            
+            <p className={`text-xs ${T.sub} mb-4 shrink-0`}>Curated for newcomers. Each comes with a step-by-step guided plan.</p>
+
             <div className="flex gap-2 mb-4 shrink-0">
               <input value={localCustomGoalTitle} onChange={e => setLocalCustomGoalTitle(e.target.value)} placeholder="Or create a custom goal..." className={`flex-1 ${T.input} rounded-xl px-3 py-2 text-sm outline-none`} />
               <button onClick={addCustomGoal} className="bg-orange-500 text-white px-3 py-2 rounded-xl text-sm font-bold">Add</button>
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
-              {(GENERATE_GOAL_TEMPLATES(profile?.origin || "USA", profile?.city || "Berlin", profile?.host || "Germany")).map(t => (
+              {goalTemplates.length === 0 ? (
+                <p className={`text-xs ${T.sub} text-center py-6`}>No goal templates available right now.</p>
+              ) : goalTemplates.map(t => (
                 <button key={t.id} onClick={() => addGoal(t)} className={`flex items-center gap-3 w-full text-left p-3 rounded-xl mb-2 ${T.card2}`}>
                   <div className="w-9 h-9 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0"><t.icon size={17} /></div>
                   <div className="flex-1">

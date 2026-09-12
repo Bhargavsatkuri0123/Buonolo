@@ -5,7 +5,7 @@ import { wsClient } from "./src/ws";
 
 // Types & Constants
 import { Profile, Post, Goal, Theme } from "./src/types";
-import { LOCATIONS, SAF, DUMMY_FEED, TEMPLATE_HOST_INFO, GENERATE_DUMMY_FEED, DUMMY_PEOPLE } from "./src/constants";
+import { LOCATIONS, SAF, TEMPLATE_HOST_INFO, GOAL_ICONS } from "./src/constants";
 
 // Components
 import { AuthFlow } from "./src/components/AuthFlow";
@@ -43,8 +43,9 @@ export default function MeetPeanutApp() {
   const [tab, setTab] = useState("home");
   const [dark, setDark] = useState(false);
   const [lang, setLang] = useState("English");
-  const [feed, setFeed] = useState<Post[]>(DUMMY_FEED);
+  const [feed, setFeed] = useState<Post[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [goalTemplates, setGoalTemplates] = useState<any[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [emergencyData, setEmergencyData] = useState<any[]>([]);
   const [newsData, setNewsData] = useState<any[]>(() => TEMPLATE_HOST_INFO("USA", "Berlin", "Germany").news);
@@ -256,54 +257,51 @@ export default function MeetPeanutApp() {
     const mapped = mapProfileFromApi(apiProfile);
     setProfile(mapped);
     fetchHostInfo(mapped.origin, mapped.host, mapped.city);
-    fetchFeed(mapped.origin, mapped.city, mapped.host);
+    fetchFeed();
     fetchGoals();
+    fetchGoalTemplates();
     fetchGroups();
     fetchEvents();
     fetchNotifications();
     wsClient.connect(async () => api.getAccessToken());
   };
 
-  const fetchFeed = async (origin?: string, city?: string, host?: string) => {
+  const fetchFeed = async () => {
     if (!user) return;
-    const o = origin || profile?.origin || "USA";
-    const c = city || profile?.city || "Berlin";
-    const h = host || profile?.host || "Germany";
-
     try {
       const [{ posts }, { users: followingUsers }] = await Promise.all([
         api.posts.list({}),
         api.users.following()
       ]);
       const followingIds = new Set(followingUsers.map((u: any) => u.id));
-      const mappedPosts = posts.map((p: any) => ({ ...mapPostFromApi(p), following: followingIds.has(p.author?.id) }));
-
-      if (mappedPosts.length > 0) {
-        setFeed(mappedPosts);
-      } else {
-        setFeed(GENERATE_DUMMY_FEED(o, c, h));
-      }
+      setFeed(posts.map((p: any) => ({ ...mapPostFromApi(p), following: followingIds.has(p.author?.id) })));
     } catch (e) {
       console.error("Failed to load feed", e);
-      setFeed(GENERATE_DUMMY_FEED(o, c, h));
+      setFeed([]);
     }
   };
 
   const fetchGoals = async () => {
     try {
       const { goals: apiGoals } = await api.goals.list();
-      if (apiGoals.length > 0) {
-        setGoals(apiGoals.map((g: any) => ({ ...mapGoalFromApi(g), icon: Target })));
-        return;
-      }
-      const { templates } = await api.content.goalTemplates();
-      const tpl = templates[0];
-      if (tpl) {
-        const { goal } = await api.goals.fromTemplate(tpl.id);
-        setGoals([{ ...mapGoalFromApi(goal), icon: Target }]);
-      }
+      setGoals(apiGoals.map((g: any) => ({ ...mapGoalFromApi(g), icon: GOAL_ICONS[g.iconName] || Target })));
     } catch (e) {
       console.error("Failed to load goals", e);
+    }
+  };
+
+  const fetchGoalTemplates = async () => {
+    try {
+      const { templates } = await api.content.goalTemplates();
+      setGoalTemplates(templates.map((t: any) => ({
+        id: t.id,
+        title: t.title,
+        cat: t.category,
+        weeks: t.weeks,
+        icon: GOAL_ICONS[t.iconName] || Target
+      })));
+    } catch (e) {
+      console.error("Failed to load goal templates", e);
     }
   };
 
@@ -386,34 +384,13 @@ export default function MeetPeanutApp() {
 
   const handleAddGoal = async (tpl: any) => {
     setShowTemplates(false);
-    const initialSteps = [
-      { t: "Understand the requirements", d: "Open the linked tool to see the full checklist for your situation and nationality.", done: false, tool: "Registration" },
-      { t: "Gather what you need", d: "Collect documents, translations and fees before booking anything — it prevents repeat visits.", done: false, tool: "Visas & Permits" },
-      { t: "Take the first official step", d: "Book the appointment / enrol / apply. Meet Peanut will remind you of deadlines.", done: false, tool: "Taxes & ID" },
-      { t: "Complete & verify", d: "Confirm you received the certificate, card or confirmation — and save a copy in your documents.", done: false, tool: "Banking" },
-    ];
-
-    if (user) {
-      try {
-        await api.goals.create({
-          title: tpl.title,
-          category: tpl.cat || "General",
-          steps: initialSteps.map(mapStepToApi)
-        });
-        await fetchGoals();
-        return;
-      } catch (e) {
-        console.error("Failed to create goal", e);
-      }
+    if (!user) return;
+    try {
+      await api.goals.fromTemplate(tpl.id);
+      await fetchGoals();
+    } catch (e) {
+      console.error("Failed to create goal from template", e);
     }
-
-    setGoals(gs => [...gs, {
-      id: "g" + Date.now(),
-      title: tpl.title,
-      cat: tpl.cat,
-      icon: tpl.icon || Target,
-      steps: initialSteps
-    }]);
   };
 
   const handleAddCustomGoal = async (customTitle: string) => {
@@ -581,7 +558,7 @@ export default function MeetPeanutApp() {
       });
       setProfile(mapProfileFromApi(updated));
       fetchHostInfo(origin, finalHost, finalCity);
-      fetchFeed(origin, finalCity, finalHost);
+      fetchFeed();
       fetchGroups();
       fetchEvents();
 
@@ -959,8 +936,9 @@ export default function MeetPeanutApp() {
             <RoadmapTab 
               goals={goals} setGoals={setGoals} openGoal={openGoal} setOpenGoal={setOpenGoal} 
               showTemplates={showTemplates} setShowTemplates={setShowTemplates} setTab={setTab} 
-              setOpenTool={setOpenTool} profile={profile!} T={T} 
+              setOpenTool={setOpenTool} profile={profile!} T={T}
               user={user}
+              goalTemplates={goalTemplates}
               onToggleStep={handleToggleStep}
               onAddGoal={handleAddGoal}
               onAddCustomGoal={handleAddCustomGoal}
@@ -988,10 +966,6 @@ export default function MeetPeanutApp() {
                     const { profile: other } = await api.users.get(id);
                     if (other?.name) threadName = other.name;
                   } catch {}
-                }
-                if (!threadName) {
-                  const found = DUMMY_PEOPLE.find(p => p.id === id || p.name === id);
-                  threadName = found?.name || id;
                 }
                 setDirectMessages(prev => {
                   if (prev.some(m => m.threadId === id)) return prev;
