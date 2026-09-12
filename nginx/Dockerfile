@@ -1,0 +1,20 @@
+FROM node:22-alpine AS build
+WORKDIR /app
+# Vite inlines VITE_-prefixed vars into the bundle at build time, not runtime,
+# so this has to be a build arg rather than a docker-compose environment var.
+ARG VITE_GOOGLE_CLIENT_ID=
+ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+COPY web/package.json web/package-lock.json* ./
+RUN npm install
+COPY web/ ./
+RUN npm run build
+
+FROM nginx:1.27-alpine
+# nginx.conf (default, local dev) has no SSO gate; nginx.qa.conf adds the
+# Microsoft Entra ID auth_request gate in front of the whole site.
+ARG NGINX_CONF_FILE=nginx.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx/common/ /etc/nginx/common/
+COPY nginx/${NGINX_CONF_FILE} /etc/nginx/nginx.conf
+
+EXPOSE 80
