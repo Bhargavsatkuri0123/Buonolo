@@ -7,7 +7,7 @@ import {
 import { Avatar } from "./Avatar";
 import { Theme, Profile } from "../types";
 import { DUMMY_PEOPLE } from "../constants";
-import { supabase } from "../../supabase";
+import { api } from "../api";
 
 interface CommunityRolesModalProps {
   isOpen: boolean;
@@ -366,18 +366,13 @@ export const CommunityInviteModal = ({
     }
     setIsSearching(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, origin, city")
-        .ilike("full_name", `%${query.trim()}%`)
-        .limit(8);
-
-      if (!error && data && data.length > 0) {
-        setSearchResults(data);
+      const { users } = await api.users.search(query.trim());
+      if (users && users.length > 0) {
+        setSearchResults(users.map(u => ({ id: u.id, full_name: u.fullName, origin: u.origin })));
       } else {
         // Fallback filter dummy people
-        const matching = DUMMY_PEOPLE.filter(p => 
-          p.name.toLowerCase().includes(query.toLowerCase()) || 
+        const matching = DUMMY_PEOPLE.filter(p =>
+          p.name.toLowerCase().includes(query.toLowerCase()) ||
           p.origin.toLowerCase().includes(query.toLowerCase())
         );
         setSearchResults(matching.map(p => ({ id: p.id, full_name: p.name, origin: p.origin })));
@@ -392,15 +387,11 @@ export const CommunityInviteModal = ({
   const handleSendAppInvite = async (targetUserId: string, targetUserName: string) => {
     setInvitedUserIds(prev => [...prev, targetUserId]);
     try {
-      await supabase.from("community_invites").insert({
-        group_id: group.id,
-        sender_id: user?.id || "anonymous",
-        sender_name: profile?.name || "Member",
-        recipient_id: targetUserId,
-        status: "pending"
-      });
-    } catch {}
-    showToast(`Invitation sent to ${targetUserName}!`);
+      await api.groups.invite(group.id, targetUserId);
+      showToast(`Invitation sent to ${targetUserName}!`);
+    } catch (e: any) {
+      showToast(e.message || `Could not invite ${targetUserName}.`);
+    }
   };
 
   return (

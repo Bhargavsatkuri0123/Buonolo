@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Send } from "lucide-react";
-import { supabase } from "../../supabase";
+import { api } from "../api";
+import { wsClient } from "../ws";
 import { Avatar } from "./Avatar";
 import { Post, Profile, Theme } from "../types";
 
@@ -17,74 +18,39 @@ export const CommentSection = ({ p, user, profile, T }: CommentSectionProps) => 
   const [loading, setLoading] = useState(true);
 
   const fetchComments = useCallback(async () => {
-    let { data, error } = await supabase
-      .from('post_comments')
-      .select('*')
-      .eq('post_id', p.id)
-      .order('created_at', { ascending: true });
-
-    if (error) {
-      // Fallback in case table is named comments
-      const res = await supabase.from('comments').select('*').eq('post_id', p.id).order('created_at', { ascending: true });
-      data = res.data;
-    }
-
-    if (data) {
-      // Map comment fields (post_comments uses `text`, comments might use `content`)
-      const mapped = data.map((c: any) => ({
+    try {
+      const { comments: apiComments } = await api.posts.comments(p.id);
+      setComments(apiComments.map((c: any) => ({
         id: c.id,
-        author_name: c.author_name || (c.user_id === user?.id ? (profile?.name || "Me") : "Community Member"),
-        content: c.text || c.content || "",
-        created_at: c.created_at,
-        user_id: c.user_id || c.author_id
-      }));
-      setComments(mapped);
+        author_name: c.author?.fullName || (c.author?.id === user?.id ? (profile?.name || "Me") : "Community Member"),
+        content: c.content || "",
+        created_at: c.createdAt,
+        user_id: c.author?.id
+      })));
+    } catch (e) {
+      console.error("Failed to load comments", e);
     }
     setLoading(false);
   }, [p.id, user?.id, profile?.name]);
 
   useEffect(() => {
     fetchComments();
-    const channel = supabase.channel(`comments:${p.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments', filter: `post_id=eq.${p.id}` }, () => {
-        fetchComments();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${p.id}` }, () => {
-        fetchComments();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return wsClient.subscribe('comment:new', (payload: any) => {
+      if (payload?.postId === p.id) fetchComments();
+    });
   }, [p.id, fetchComments]);
 
   const handleAddComment = async () => {
     if (!commentText.trim() || !user) return;
     const textToSubmit = commentText;
     setCommentText(""); // Clear early for better UX
-    
-    let { error } = await supabase.from('post_comments').insert({
-      post_id: p.id,
-      user_id: user.id,
-      text: textToSubmit
-    });
 
-    if (error) {
-      // Try fallback to comments table
-      const res = await supabase.from('comments').insert({
-        post_id: p.id,
-        author_id: user.id,
-        author_name: profile?.name || "User",
-        content: textToSubmit
-      });
-      error = res.error;
-    }
-    
-    if (error) {
-      console.error("Error adding comment:", error);
-      setCommentText(textToSubmit); // Restore on error
-    } else {
+    try {
+      await api.posts.addComment(p.id, textToSubmit);
       fetchComments();
-      const { data: postData } = await supabase.from('posts').select('comments_count').eq('id', p.id).single();
-      await supabase.from('posts').update({ comments_count: (postData?.comments_count || 0) + 1 }).eq('id', p.id);
+    } catch (e) {
+      console.error("Error adding comment:", e);
+      setCommentText(textToSubmit); // Restore on error
     }
   };
 
@@ -108,17 +74,17 @@ export const CommentSection = ({ p, user, profile, T }: CommentSectionProps) => 
       <div className="flex gap-2 items-center">
         <Avatar name={profile?.name || "User"} size={6} />
         <div className={`flex-1 flex items-center rounded-full px-3 py-1.5 ${T.card2}`}>
-          <input 
-            type="text" 
-            value={commentText} 
-            onChange={e => setCommentText(e.target.value)} 
-            placeholder="Write a comment..." 
+          <input
+            type="text"
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            placeholder="Write a comment..."
             className={`bg-transparent outline-none flex-1 text-sm ${T.text}`}
             onKeyDown={e => e.key === 'Enter' && handleAddComment()}
           />
-          <button 
-            onClick={handleAddComment} 
-            disabled={!commentText.trim()} 
+          <button
+            onClick={handleAddComment}
+            disabled={!commentText.trim()}
             className={`ml-2 ${commentText.trim() ? "text-orange-500" : "text-gray-400"}`}
           >
             <Send size={16} />

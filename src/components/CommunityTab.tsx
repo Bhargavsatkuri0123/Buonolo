@@ -20,7 +20,8 @@ import {
   DUMMY_EVENTS, 
   DUMMY_PEOPLE 
 } from "../constants";
-import { supabase } from "../../supabase";
+import { api } from "../api";
+import { wsClient } from "../ws";
 
 interface CommunityTabProps {
   communitiesData: any[];
@@ -202,30 +203,22 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
   const handleRSVP = async () => {
     if (!user || isRsvping) return;
     setIsRsvping(true);
-    if (joined) {
-      const { error } = await supabase.from("event_attendees").delete().eq("event_id", selectedEvent.id).eq("user_id", user.id);
-      if (!error) {
+    try {
+      if (joined) {
+        await api.events.cancelRsvp(selectedEvent.id);
         setJoined(false);
-        const newAttendees = Math.max(0, attendees - 1);
-        setAttendees(newAttendees);
-        await supabase.from("events").update({ attendees: newAttendees }).eq("id", selectedEvent.id);
+        setAttendees((a: number) => Math.max(0, a - 1));
         onRSVP && onRSVP(selectedEvent.id, false);
         showToast("RSVP cancelled");
-      }
-    } else {
-      const { error } = await supabase.from("event_attendees").insert({ 
-        event_id: selectedEvent.id, 
-        user_id: user.id, 
-        user_name: user.user_metadata?.full_name || "User" 
-      });
-      if (!error) {
+      } else {
+        await api.events.rsvp(selectedEvent.id);
         setJoined(true);
-        const newAttendees = attendees + 1;
-        setAttendees(newAttendees);
-        await supabase.from("events").update({ attendees: newAttendees }).eq("id", selectedEvent.id);
+        setAttendees((a: number) => a + 1);
         onRSVP && onRSVP(selectedEvent.id, true);
         showToast("RSVP confirmed! See you there 🎉");
       }
+    } catch (e) {
+      console.error("Failed to RSVP", e);
     }
     setIsRsvping(false);
   };
@@ -541,58 +534,57 @@ export const GroupView = ({
   useEffect(() => {
     fetchUpdates();
     fetchMembers();
-    const channel = supabase.channel(`realtime_group_posts_${group.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-        fetchUpdates();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${group.id}` }, () => {
-        fetchMembers();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return wsClient.subscribe('group:update', (payload: any) => {
+      if (payload?.groupId === group.id) fetchUpdates();
+    });
   }, [group.id]);
 
   const fetchMembers = async () => {
-    const { data, error } = await supabase.from("group_members").select("user_id, user_name").eq("group_id", group.id);
-    if (!error && data && data.length > 0) {
-      setActualMembers(data.map((m: any) => ({
-        id: m.user_id,
-        name: m.user_name || "Community Member"
-      })));
-      setMembersCount(data.length);
-    } else {
-      // Fallback default members with role clarity
-      setActualMembers([
-        { id: creatorId, name: creatorName, role: "Creator" },
-        { id: "p2", name: "Ahmed Khan", role: "Admin" },
-        { id: "p3", name: "Elena Rossi", role: "Member" },
-        { id: profile?.name || "m2", name: profile?.name || "You", role: "Member" },
-        { id: "m3", name: "Sophie Taylor", role: "Member" }
-      ]);
+    try {
+      const { group: fullGroup } = await api.groups.get(group.id);
+      if (fullGroup.members && fullGroup.members.length > 0) {
+        setActualMembers(fullGroup.members.map((m: any) => ({
+          id: m.id,
+          name: m.fullName || "Community Member",
+          role: m.role === "admin" ? "Admin" : (m.id === creatorId ? "Creator" : "Member")
+        })));
+        setMembersCount(fullGroup.members.length);
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to load members", e);
     }
+    // Fallback default members with role clarity
+    setActualMembers([
+      { id: creatorId, name: creatorName, role: "Creator" },
+      { id: "p2", name: "Ahmed Khan", role: "Admin" },
+      { id: "p3", name: "Elena Rossi", role: "Member" },
+      { id: profile?.name || "m2", name: profile?.name || "You", role: "Member" },
+      { id: "m3", name: "Sophie Taylor", role: "Member" }
+    ]);
   };
 
   const fetchUpdates = async () => {
-    const { data: updates, error } = await supabase
-      .from("posts")
-      .select("*")
-      .eq("location", `group:${group.id}`)
-      .order("created_at", { ascending: false });
-    
-    if (!error && updates && updates.length > 0) {
-      setPosts(updates.map(u => ({
-        id: u.id,
-        author_id: u.author_id,
-        user: { name: u.author_name || "Member" },
-        text: u.content,
-        time: new Date(u.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        likes: Array.isArray(u.likes) ? u.likes.length : 0,
-        liked: Array.isArray(u.likes) && u.likes.includes(user?.id),
-        comments: u.comments_count || 0
-      })));
-    } else {
-      // Default welcome post
-      setPosts([
+    try {
+      const { updates } = await api.groups.updates(group.id);
+      if (updates && updates.length > 0) {
+        setPosts(updates.map((u: any) => ({
+          id: u.id,
+          author_id: u.author?.id,
+          user: { name: u.author?.fullName || "Member" },
+          text: u.content,
+          time: new Date(u.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+          likes: 0,
+          liked: false,
+          comments: 0
+        })));
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to load group updates", e);
+    }
+    // Default welcome post
+    setPosts([
         {
           id: `welcome_${group.id}`,
           author_id: creatorId,
@@ -604,7 +596,6 @@ export const GroupView = ({
           comments: 1
         }
       ]);
-    }
   };
 
   // Promote Member to Admin (Multi-Admins Capability)
@@ -674,25 +665,29 @@ export const GroupView = ({
     setMembersCount(nextCount);
     onToggleJoinGroup && onToggleJoinGroup(group.id, nextJoined);
 
-    if (nextJoined) {
-      await supabase.from("group_members").insert({
-        group_id: group.id,
-        user_id: user.id,
-        user_name: profile?.name || user.user_metadata?.full_name || "User"
-      });
-      fetchMembers();
-      showToast(`Joined ${group.name}!`);
-    } else {
-      await supabase.from("group_members").delete().eq("group_id", group.id).eq("user_id", user.id);
-      fetchMembers();
-      showToast(`Left ${group.name}`);
+    try {
+      if (nextJoined) {
+        await api.groups.join(group.id);
+        fetchMembers();
+        showToast(`Joined ${group.name}!`);
+      } else {
+        await api.groups.leave(group.id);
+        fetchMembers();
+        showToast(`Left ${group.name}`);
+      }
+    } catch (e) {
+      console.error("Failed to update membership", e);
     }
   };
 
   const handleLeaveGroup = async () => {
     if (confirm(`Are you sure you want to leave ${group.name}?`)) {
       if (user) {
-        await supabase.from("group_members").delete().eq("group_id", group.id).eq("user_id", user.id);
+        try {
+          await api.groups.leave(group.id);
+        } catch (e) {
+          console.error("Failed to leave group", e);
+        }
       }
       setIsJoined(false);
       setMembersCount(Math.max(0, membersCount - 1));
@@ -714,32 +709,15 @@ export const GroupView = ({
     const textToSubmit = newUpdateText;
     setNewUpdateText("");
 
-    const { error } = await supabase.from("posts").insert({
-      content: textToSubmit,
-      author_id: user.id,
-      author_name: profile?.name || user?.user_metadata?.full_name || "Member",
-      location: `group:${group.id}`,
-      privacy: "Public",
-      likes: []
-    });
-
-    if (!error) {
+    try {
+      await api.groups.postUpdate(group.id, textToSubmit);
       fetchUpdates();
       showToast("Post shared with the group!");
-    } else {
+    } catch (e) {
       setNewUpdateText(textToSubmit);
       showToast("Could not publish post. Please try again.");
     }
     setIsPosting(false);
-  };
-
-  const handleDeletePost = async (postId: string) => {
-    if (confirm("Delete this post from the group?")) {
-      setPosts(prev => prev.filter(p => p.id !== postId));
-      setActivePostMenu(null);
-      await supabase.from("posts").delete().eq("id", postId);
-      showToast("Post removed");
-    }
   };
 
   const handleCopyPostLink = (text: string) => {
@@ -1108,7 +1086,6 @@ export const GroupView = ({
               </div>
             ) : (
               sortedPosts.map((p) => {
-                const isAuthor = user && (p.author_id === user.id || p.user?.name === profile?.name);
                 const canModerate = isCurrentUserAdmin || isCurrentUserCreator;
                 const isPostCreator = p.author_id === creatorId || (p.user?.name && p.user.name.toLowerCase() === creatorName.toLowerCase());
                 const isPostAdmin = !isPostCreator && (adminIds.includes(p.author_id) || (p.user?.name && (adminIds.includes(p.user.name) || adminIds.includes(p.user.name.toLowerCase()))));
@@ -1179,14 +1156,6 @@ export const GroupView = ({
                                 className={`text-left px-2.5 py-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-2`}
                               >
                                 <Pin size={13} /> {isPinned ? "Unpin Post" : "Pin Announcement"}
-                              </button>
-                            )}
-                            {(isAuthor || canModerate) && (
-                              <button 
-                                onClick={() => handleDeletePost(p.id)}
-                                className="text-left px-2.5 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl flex items-center gap-2"
-                              >
-                                <Trash2 size={13} /> Delete Post
                               </button>
                             )}
                           </div>
@@ -1532,9 +1501,6 @@ export const CommunityTab = ({
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [groupToInvite, setGroupToInvite] = useState<any>(null);
-  const [inviteSearch, setInviteSearch] = useState("");
-  const [inviteResults, setInviteResults] = useState<any[]>([]);
-  const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
 
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
@@ -1572,145 +1538,96 @@ export const CommunityTab = ({
     fetchInvites();
   }, [user]);
 
-  useEffect(() => {
-    if (inviteSearch.trim().length > 1) {
-      const timer = setTimeout(() => {
-        searchUsers();
-      }, 300);
-      return () => clearTimeout(timer);
-    } else {
-      setInviteResults([]);
-    }
-  }, [inviteSearch]);
-
-  const searchUsers = async () => {
-    const { data: users, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, origin")
-      .ilike("full_name", `%${inviteSearch}%`)
-      .neq("id", user?.id)
-      .limit(5);
-    
-    if (!error && users) {
-      setInviteResults(users);
-    }
-  };
-
-  const sendInvite = async (inviteeId: string) => {
-    if (!user || !groupToInvite) return;
-    setInvitingUserId(inviteeId);
-    
-    const { error } = await supabase.from("group_invites").insert({
-      group_id: groupToInvite.id,
-      inviter_id: user.id,
-      invitee_id: inviteeId
-    });
-
-    if (!error) {
-      await supabase.from("notifications").insert({
-        user_id: inviteeId,
-        type: "group_invite",
-        content: `${profile.name} invited you to join ${groupToInvite.name}`
-      });
-      showToast(`Invitation sent for ${groupToInvite.name}!`);
-      setIsInviteModalOpen(false);
-      setInviteSearch("");
-    } else if (error.code === "23505") {
-      showToast("This user is already invited or a member.");
-    } else {
-      showToast(error.message);
-    }
-    setInvitingUserId(null);
-  };
-
   const fetchInvites = async () => {
     if (!user) return;
-    const { data: invs, error } = await supabase
-      .from("group_invites")
-      .select("*, groups(name, image, description), profiles!inviter_id(full_name)")
-      .eq("invitee_id", user.id)
-      .eq("status", "pending");
-    
-    if (!error && invs) {
+    try {
+      const { invites: invs } = await api.groups.receivedInvites();
       setInvites(invs);
+    } catch (e) {
+      console.error("Failed to load invites", e);
     }
   };
 
   const handleInviteAction = async (invite: any, action: "accepted" | "declined") => {
-    const { error: updateError } = await supabase
-      .from("group_invites")
-      .update({ status: action })
-      .eq("id", invite.id);
-
-    if (!updateError && action === "accepted") {
-      await supabase.from("group_members").insert({
-        group_id: invite.group_id,
-        user_id: user.id,
-        user_name: profile.name
-      });
-      showToast(`Joined ${invite.groups?.name}!`);
-      fetchCommunities();
-      onRefreshGroups && onRefreshGroups();
+    try {
+      await api.groups.respondInvite(invite.id, action === "accepted" ? "ACCEPTED" : "DECLINED");
+      if (action === "accepted") {
+        showToast(`Joined ${invite.group?.name}!`);
+        fetchCommunities();
+        onRefreshGroups && onRefreshGroups();
+      }
+    } catch (e) {
+      console.error("Failed to respond to invite", e);
     }
     fetchInvites();
   };
 
   const fetchCommunities = async () => {
-    const { data: groups, error } = await supabase.from("groups").select("*, group_members(user_id)");
-    if (!error && groups && groups.length > 0) {
-      const dbGroups = groups.map((g: any) => ({
-        id: g.id,
-        name: g.name,
-        desc: g.description,
-        category: g.category || "General",
-        emoji: g.image || (g.category === "Social" ? "🌍" : g.category === "Housing" ? "🏠" : g.category === "Professional" ? "💼" : "🏘️"),
-        members: g.group_members?.length || 0,
-        joined: g.group_members?.some((m: any) => m.user_id === user?.id)
-      }));
-      setData(dbGroups);
-    } else {
-      const o = profile?.origin || "USA";
-      const c = profile?.city || "Berlin";
-      const h = profile?.host || "Germany";
-      setData(GENERATE_DUMMY_COMMUNITIES(o, c, h));
+    try {
+      const { groups } = await api.groups.list();
+      if (groups && groups.length > 0) {
+        setData(groups.map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          desc: g.description,
+          category: g.category || "General",
+          emoji: g.emoji || "🏘️",
+          members: g.membersCount || 0,
+          joined: !!g.joined
+        })));
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to load communities", e);
     }
+    const o = profile?.origin || "USA";
+    const c = profile?.city || "Berlin";
+    const h = profile?.host || "Germany";
+    setData(GENERATE_DUMMY_COMMUNITIES(o, c, h));
   };
 
   const fetchEvents = async () => {
-    const { data: evs, error } = await supabase.from("events").select("*, event_attendees(user_id, user_name)");
-    if (!error && evs && evs.length > 0) {
-      const dbEvents = evs.map((e: any) => ({
-        ...e,
-        attendeesList: e.event_attendees || [],
-        joined: e.event_attendees?.some((m: any) => m.user_id === user?.id)
-      }));
-      setEvents(dbEvents);
-    } else {
-      const o = profile?.origin || "USA";
-      const c = profile?.city || "Berlin";
-      const h = profile?.host || "Germany";
-      setEvents(GENERATE_DUMMY_EVENTS(o, c, h));
+    try {
+      const { events: evs } = await api.events.list();
+      if (evs && evs.length > 0) {
+        setEvents(evs.map((e: any) => ({
+          ...e,
+          attendees: e.attendeesCount,
+          attendeesList: [],
+          joined: !!e.attending
+        })));
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to load events", e);
     }
+    const o = profile?.origin || "USA";
+    const c = profile?.city || "Berlin";
+    const h = profile?.host || "Germany";
+    setEvents(GENERATE_DUMMY_EVENTS(o, c, h));
   };
 
   const fetchPeople = async () => {
-    const { data: pros, error } = await supabase.from("profiles").select("*").neq("id", user?.id).limit(15);
-    if (!error && pros && pros.length > 0) {
-      const dbPeople = pros.map((p: any) => ({
-        id: p.id,
-        name: p.full_name || p.handle || "Newcomer",
-        origin: p.origin || "International",
-        city: p.city || profile.city || "Berlin",
-        bio: p.bio || "Enthusiastic expat exploring Germany.",
-        avatar: (p.full_name || p.handle || "U").substring(0, 2).toUpperCase()
-      }));
-      setPeople(dbPeople);
-    } else {
-      const o = profile?.origin || "USA";
-      const c = profile?.city || "Berlin";
-      const h = profile?.host || "Germany";
-      setPeople(GENERATE_DUMMY_PEOPLE(o, c, h));
+    try {
+      const { users: pros } = await api.users.search("");
+      if (pros && pros.length > 0) {
+        setPeople(pros.map((p: any) => ({
+          id: p.id,
+          name: p.fullName || p.handle || "Newcomer",
+          origin: p.origin || "International",
+          city: profile.city || "Berlin",
+          bio: p.bio || "Enthusiastic expat exploring Germany.",
+          avatar: (p.fullName || p.handle || "U").substring(0, 2).toUpperCase()
+        })));
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to load people", e);
     }
+    const o = profile?.origin || "USA";
+    const c = profile?.city || "Berlin";
+    const h = profile?.host || "Germany";
+    setPeople(GENERATE_DUMMY_PEOPLE(o, c, h));
   };
 
   const handleJoinGroup = async (groupId: string) => {
@@ -1721,14 +1638,12 @@ export const CommunityTab = ({
     // Optimistic UI update
     setData(prev => prev.map(g => g.id === groupId ? { ...g, joined: true, members: g.members + 1 } : g));
     showToast("Joined group!");
-    
-    const { error } = await supabase.from("group_members").insert({
-      group_id: groupId,
-      user_id: user.id,
-      user_name: profile.name
-    });
-    if (!error) {
+
+    try {
+      await api.groups.join(groupId);
       onRefreshGroups && onRefreshGroups();
+    } catch (e) {
+      console.error("Failed to join group", e);
     }
   };
 
@@ -1745,37 +1660,27 @@ export const CommunityTab = ({
     }
     setIsCreating(true);
     setCreateError("");
-    
-    const { data: newGroup, error } = await supabase.from("groups").insert({
-      name: newGroupName.trim(),
-      description: newGroupDesc.trim(),
-      category: newGroupCat,
-      image: newGroupEmoji,
-      admin_id: user.id,
-      admin_name: profile.name || user.user_metadata?.full_name || "User"
-    }).select().single();
 
-    if (error) {
-      setCreateError(error.message);
-    } else if (newGroup) {
-      await supabase.from("group_members").insert({
-        group_id: newGroup.id,
-        user_id: user.id,
-        user_name: profile.name || user.user_metadata?.full_name || "User"
+    try {
+      const { group: newGroup } = await api.groups.create({
+        name: newGroupName.trim(),
+        description: newGroupDesc.trim(),
+        category: newGroupCat,
+        emoji: newGroupEmoji
       });
-      
+
       // Update local state instantly
       const createdObj = {
         id: newGroup.id,
         name: newGroup.name,
         desc: newGroup.description,
         category: newGroup.category,
-        emoji: newGroup.image || newGroupEmoji,
+        emoji: newGroup.emoji || newGroupEmoji,
         members: 1,
         joined: true
       };
       setData(prev => [createdObj, ...prev]);
-      
+
       setIsCreateGroupOpen(false);
       setNewGroupName("");
       setNewGroupDesc("");
@@ -1783,6 +1688,8 @@ export const CommunityTab = ({
       setNewGroupEmoji("🏘️");
       showToast(`Group "${newGroup.name}" created!`);
       onRefreshGroups && onRefreshGroups();
+    } catch (e: any) {
+      setCreateError(e.message || "Failed to create group");
     }
     setIsCreating(false);
   };
@@ -1796,46 +1703,36 @@ export const CommunityTab = ({
     setIsCreating(true);
     setCreateError("");
 
-    // Format readable date
-    let formattedDate = newEventDateInput;
+    // Compute an actual Date for the API, and a readable label for display
+    let isoDate = new Date().toISOString();
+    let formattedDate = "This Weekend · 18:00";
     if (newEventDateInput) {
-      try {
-        const d = new Date(`${newEventDateInput}T${newEventTimeInput || '18:00'}`);
+      const d = new Date(`${newEventDateInput}T${newEventTimeInput || '18:00'}`);
+      if (!isNaN(d.getTime())) {
+        isoDate = d.toISOString();
         formattedDate = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ` · ${newEventTimeInput || '18:00'}`;
-      } catch {
-        formattedDate = `${newEventDateInput} · ${newEventTimeInput}`;
       }
-    } else {
-      formattedDate = "This Weekend · 18:00";
     }
-    
-    const { data: newEvent, error } = await supabase.from("events").insert({
-      title: newEventName.trim(),
-      description: newEventDesc.trim(),
-      image: newEventEmoji,
-      date: formattedDate,
-      location: newEventLocation.trim(),
-      creator_id: user.id
-    }).select().single();
 
-    if (error) {
-      setCreateError(error.message);
-    } else if (newEvent) {
-      await supabase.from("event_attendees").insert({
-        event_id: newEvent.id,
-        user_id: user.id,
-        user_name: profile.name || user.user_metadata?.full_name || "User"
+    try {
+      const { event: newEvent } = await api.events.create({
+        title: newEventName.trim(),
+        description: newEventDesc.trim(),
+        image: newEventEmoji,
+        date: isoDate,
+        location: newEventLocation.trim()
       });
-      await supabase.from("events").update({ attendees: 1 }).eq("id", newEvent.id);
-      
+      await api.events.rsvp(newEvent.id);
+
       const createdEventObj = {
         ...newEvent,
+        date: formattedDate,
         joined: true,
         attendees: 1,
         attendeesList: [{ user_id: user.id, user_name: profile.name }]
       };
       setEvents(prev => [createdEventObj, ...prev]);
-      
+
       setIsCreateEventOpen(false);
       setNewEventName("");
       setNewEventDesc("");
@@ -1843,6 +1740,8 @@ export const CommunityTab = ({
       setNewEventDateInput("");
       setNewEventEmoji("📅");
       showToast(`Event "${newEvent.title}" published!`);
+    } catch (e: any) {
+      setCreateError(e.message || "Failed to create event");
     }
     setIsCreating(false);
   };
@@ -2047,11 +1946,11 @@ export const CommunityTab = ({
                   <div key={inv.id} className={`${T.card} rounded-2xl p-3.5 shadow-sm border-2 border-orange-200 dark:border-orange-500/30`}>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-500/10 flex items-center justify-center text-xl shrink-0">
-                        {inv.groups?.image || "🏘️"}
+                        {inv.group?.emoji || "🏘️"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-bold ${T.text} truncate`}>{inv.groups?.name}</p>
-                        <p className={`text-[11px] ${T.sub}`}>Invited by {inv.profiles?.full_name || "Community member"}</p>
+                        <p className={`text-xs font-bold ${T.text} truncate`}>{inv.group?.name}</p>
+                        <p className={`text-[11px] ${T.sub}`}>Invited by {inv.inviter?.fullName || "Community member"}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3">

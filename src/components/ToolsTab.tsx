@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Header } from "./Header";
 import { Theme, Profile } from "../types";
-import { supabase } from "../../supabase";
+import { api, mapStepToApi } from "../api";
 
 interface ToolDetailProps {
   tool: any;
@@ -622,13 +622,16 @@ export const ToolDetail = ({ tool, profile, emergencyData, T, setOpenTool, setGo
                 setOpenTool(null);
                 
                 if (user) {
-                  await supabase.from("user_goals").insert({
-                    user_id: user.id,
-                    title: tool.name,
-                    category: tool.category || "Tool Goal",
-                    icon_name: "Wrench",
-                    steps
-                  });
+                  try {
+                    await api.goals.create({
+                      title: tool.name,
+                      category: tool.category || "Tool Goal",
+                      iconName: "Wrench",
+                      steps: steps.map(mapStepToApi)
+                    });
+                  } catch (e) {
+                    console.error("Failed to save goal", e);
+                  }
                 }
               }}
               className="w-full bg-orange-500 text-white rounded-xl p-4 font-bold disp text-base shadow-md hover:shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"

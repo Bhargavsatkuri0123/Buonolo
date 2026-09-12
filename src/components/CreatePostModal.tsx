@@ -1,18 +1,19 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ArrowLeft, ImageIcon, Users as UsersIcon, Smile, MapPin, X, Globe, Lock, ChevronDown, Check, MoreHorizontal, Search } from "lucide-react";
-import { supabase } from "../../supabase";
+import { api } from "../api";
 import { Avatar } from "./Avatar";
 import { Profile, Theme } from "../types";
 
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onPosted?: () => void;
   profile: Profile;
   user: any;
   T: Theme;
 }
 
-export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePostModalProps) => {
+export const CreatePostModal = ({ isOpen, onClose, onPosted, profile, user, T }: CreatePostModalProps) => {
   const [postText, setPostText] = useState("");
   const [bgTheme, setBgTheme] = useState("");
   const [privacy, setPrivacy] = useState("Public");
@@ -20,30 +21,22 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [location, setLocation] = useState("");
-  const [tagged, setTagged] = useState<string[]>([]);
+  const [tagged, setTagged] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeMenu, setActiveMenu] = useState<"feeling" | "location" | "tag" | "settings" | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dynamicFriends, setDynamicFriends] = useState<string[]>([]);
-  const [dynamicLocations, setDynamicLocations] = useState<string[]>([]);
+  const [dynamicFriends, setDynamicFriends] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     if (isOpen && user) {
       const fetchMetadata = async () => {
-        const { data: profiles } = await supabase.from('profiles').select('full_name, city, host').neq('id', user.id);
-        if (profiles) {
-          const names = Array.from(new Set(profiles.map(p => p.full_name).filter(Boolean))) as string[];
-          setDynamicFriends(names);
-
-          const locs = Array.from(new Set(profiles.map(p => {
-            if (p.city && p.host) return `${p.city}, ${p.host}`;
-            if (p.city) return p.city;
-            if (p.host) return p.host;
-            return null;
-          }).filter(Boolean))) as string[];
-          setDynamicLocations(locs);
+        try {
+          const { users } = await api.users.search("");
+          setDynamicFriends(users.filter(u => u.id !== user.id).map(u => ({ id: u.id, name: u.fullName })));
+        } catch {
+          /* fall back to static defaults below */
         }
       };
       fetchMetadata();
@@ -58,41 +51,24 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
     setLoading(true);
     
     try {
-      let attachmentUrl = attachment;
-      
+      let attachmentUrl = attachment ?? undefined;
+
       if (attachmentFile) {
-        const fileExt = attachmentFile.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${user.id}/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('post-attachments')
-          .upload(filePath, attachmentFile);
-          
-        if (uploadError) throw uploadError;
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('post-attachments')
-          .getPublicUrl(filePath);
-          
-        attachmentUrl = publicUrl;
+        const { url } = await api.uploads.upload(attachmentFile);
+        attachmentUrl = url;
       }
-      
+
       if (user) {
-        const { error: postError } = await supabase.from('posts').insert({
+        await api.posts.create({
           content: postText || (attachmentUrl ? "[Image]" : ""),
-          author_id: user.id,
-          author_name: profile?.name || "User",
           attachment: attachmentUrl,
-          bg_theme: bgTheme,
-          feeling: feeling,
-          location: location,
-          tags: tagged,
-          privacy: privacy
+          bgTheme,
+          feeling,
+          location,
+          privacy: privacy.toUpperCase() as "PUBLIC" | "FRIENDS" | "PRIVATE",
+          taggedUserIds: tagged.map(t => t.id)
         });
-        
-        if (postError) throw postError;
-        
+
         setPostText("");
         setAttachment(null);
         setAttachmentFile(null);
@@ -100,6 +76,7 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
         setLocation("");
         setTagged([]);
         onClose();
+        onPosted?.();
       }
     } catch (e: any) {
       setError(e.message);
@@ -117,9 +94,9 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
     }
   };
 
-  const friendsList = dynamicFriends.length > 0 ? dynamicFriends : ["Alex", "Sam", "Maria", "David", "Jessica"];
+  const friendsList = dynamicFriends.length > 0 ? dynamicFriends : ["Alex", "Sam", "Maria", "David", "Jessica"].map(name => ({ id: name, name }));
   const feelingsList = ["happy 😊", "sad 😢", "good 👍", "bad 👎", "excited 🤩", "blessed 🙏", "loved ❤️"];
-  const locationList = dynamicLocations.length > 0 ? dynamicLocations : ["Berlin, Germany", "New York, USA", "London, UK", "Paris, France", "Tokyo, Japan"];
+  const locationList = ["Berlin, Germany", "New York, USA", "London, UK", "Paris, France", "Tokyo, Japan"];
   const backgrounds = ["", "bg-red-500", "bg-blue-500", "bg-orange-500", "bg-green-500", "bg-purple-500", "bg-gradient-to-r from-cyan-500 to-blue-500", "bg-gradient-to-r from-fuchsia-500 to-pink-500"];
 
   if (activeMenu) {
@@ -148,12 +125,12 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
             </button>
           ))}
           {activeMenu === "tag" && friendsList.map(fr => (
-            <button key={fr} onClick={() => setTagged(prev => prev.includes(fr) ? prev.filter(t => t !== fr) : [...prev, fr])} className={`w-full text-left px-4 py-3 hover:${T.card2} rounded-xl ${T.text} flex items-center justify-between`}>
+            <button key={fr.id} onClick={() => setTagged(prev => prev.some(t => t.id === fr.id) ? prev.filter(t => t.id !== fr.id) : [...prev, fr])} className={`w-full text-left px-4 py-3 hover:${T.card2} rounded-xl ${T.text} flex items-center justify-between`}>
               <div className="flex items-center gap-3">
-                <Avatar name={fr} />
-                <span className="font-semibold">{fr}</span>
+                <Avatar name={fr.name} />
+                <span className="font-semibold">{fr.name}</span>
               </div>
-              {tagged.includes(fr) && <Check size={18} className="text-orange-500" />}
+              {tagged.some(t => t.id === fr.id) && <Check size={18} className="text-orange-500" />}
             </button>
           ))}
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Home, Map, Wrench, User, Users, Target, Bot } from "lucide-react";
-import { supabase } from "./supabase";
+import { api, ApiError, mapProfileFromApi, mapPostFromApi, mapGoalFromApi, mapStepToApi, ProfileDto } from "./src/api";
+import { wsClient } from "./src/ws";
 
 // Types & Constants
 import { Profile, Post, Goal, Theme } from "./src/types";
@@ -35,23 +36,8 @@ const FONT = (
   `}</style>
 );
 
-const isUuid = (val: string): boolean => {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-};
-
-const SEED_DIRECT_MESSAGES = [
-  {
-    id: "seed-msg-1",
-    threadId: "p1",
-    threadName: "Sarah Miller",
-    sender: "Sarah Miller",
-    text: "Hey! Welcome to the city. Let me know if you need any pointers on getting registered or finding a place!",
-    time: "Yesterday",
-    isMe: false,
-    sharedPost: null,
-    created_at: new Date(Date.now() - 86400000).toISOString()
-  }
-];
+const DEMO_EMAIL = "demo@meet-peanut.app";
+const DEMO_PASSWORD = "MeetPeanutDemo!2026";
 
 export default function MeetPeanutApp() {
   const [tab, setTab] = useState("home");
@@ -86,14 +72,7 @@ export default function MeetPeanutApp() {
   const [activeMessageThread, setActiveMessageThread] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
   const [sharedPostData, setSharedPostData] = useState<any>(null);
-  const [directMessages, setDirectMessages] = useState<any[]>(() => {
-    try {
-      const stored = localStorage.getItem("meet-peanut_dm_default");
-      return stored ? JSON.parse(stored) : SEED_DIRECT_MESSAGES;
-    } catch {
-      return SEED_DIRECT_MESSAGES;
-    }
-  });
+  const [directMessages, setDirectMessages] = useState<any[]>([]);
   const [botMessages, setBotMessages] = useState<any[]>([
     { id: "b1", sender: "Peanut", text: "Hello! I am Peanut, your immigration assistant. Ask me anything!", time: "Now", isMe: false }
   ]);
@@ -128,16 +107,18 @@ export default function MeetPeanutApp() {
   
   const fetchNotifications = async () => {
     if (!user) return;
-    const { data, error } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    if (!error && data) {
-      setNotifications(data.map((n: any) => ({
+    try {
+      const { notifications: apiNotifs } = await api.notifications.list();
+      setNotifications(apiNotifs.map((n: any) => ({
         id: n.id,
-        title: n.type === 'goal' ? 'Goal Update' : (n.type === 'system' ? 'System Notification' : 'Notification'),
-        body: n.content,
-        time: new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-        read: n.is_read,
+        title: n.title || (n.type === 'goal' ? 'Goal Update' : (n.type === 'system' ? 'System Notification' : 'Notification')),
+        body: n.body,
+        time: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        read: n.isRead,
         type: n.type
       })));
+    } catch (e) {
+      console.error("Failed to load notifications", e);
     }
   };
 
@@ -147,135 +128,73 @@ export default function MeetPeanutApp() {
 
   useEffect(() => {
     if (!user) return;
-    const channel = supabase.channel('realtime_notifications')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => {
-        fetchNotifications();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return wsClient.subscribe('notification:new', () => { fetchNotifications(); });
   }, [user]);
 
-  const fetchMessages = async () => {
+  const fetchConversations = async () => {
     if (!user) return;
-    
-    // 1. Load locally stored messages first
-    let localMsgs: any[] = [];
     try {
-      const stored = localStorage.getItem(`meet-peanut_dm_${user.id}`);
-      if (stored) {
-        localMsgs = JSON.parse(stored);
-      } else {
-        localMsgs = [...SEED_DIRECT_MESSAGES];
-      }
-    } catch {
-      localMsgs = [...SEED_DIRECT_MESSAGES];
+      const { conversations } = await api.messages.conversations();
+      const seeded = conversations.map((c: any) => ({
+        id: c.lastMessage.id,
+        threadId: c.counterpart.id,
+        threadName: c.counterpart.fullName,
+        sender: c.lastMessage.senderId === user.id ? "Me" : c.counterpart.fullName,
+        text: c.lastMessage.content,
+        time: new Date(c.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isMe: c.lastMessage.senderId === user.id,
+        sharedPost: null,
+        created_at: c.lastMessage.createdAt
+      }));
+      setDirectMessages(prev => {
+        const withoutSeeded = prev.filter(m => m.isFake);
+        return [...seeded, ...withoutSeeded];
+      });
+    } catch (e) {
+      console.error("Failed to load conversations", e);
     }
+  };
 
-    // If user is demo user or not a valid UUID, use local messages
-    if (!isUuid(user.id)) {
-      setDirectMessages(localMsgs);
-      return;
-    }
-
+  const fetchThread = async (otherUserId: string) => {
+    if (!user) return;
     try {
-      const session = (await supabase.auth.getSession()).data?.session;
-      if (!session || session.user?.id !== user.id) {
-        setDirectMessages(localMsgs);
-        return;
-      }
-
-      // 2. Fetch chat rooms for user from Supabase
-      const { data: rooms, error: roomsError } = await supabase
-        .from('chat_rooms')
-        .select('id, participants')
-        .contains('participants', [user.id]);
-        
-      if (roomsError || !rooms || rooms.length === 0) {
-        setDirectMessages(localMsgs);
-        return;
-      }
-      
-      const roomIds = rooms.map(r => r.id);
-      
-      // 3. Fetch messages for these rooms
-      const { data: messages, error: msgsError } = await supabase
-        .from('messages')
-        .select('*')
-        .in('chat_room_id', roomIds)
-        .order('created_at', { ascending: true });
-        
-      if (msgsError || !messages) {
-        setDirectMessages(localMsgs);
-        return;
-      }
-      
-      // 4. Resolve other user profiles
-      const otherUserIds = new Set<string>();
-      rooms.forEach(r => {
-        r.participants?.forEach((p: string) => {
-          if (p !== user.id) otherUserIds.add(p);
-        });
-      });
-      
-      let profilesMap: Record<string, string> = {};
-      if (otherUserIds.size > 0) {
-        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', Array.from(otherUserIds));
-        if (profiles) {
-          profiles.forEach(p => profilesMap[p.id] = p.full_name || "Unknown");
-        }
-      }
-      
-      // 5. Format remote messages
-      const remoteFormatted = messages.map(m => {
-        const room = rooms.find(r => r.id === m.chat_room_id);
-        const otherUserId = room?.participants?.find((p: string) => p !== user.id) || "unknown";
-        const isMe = m.sender_id === user.id;
-        const threadName = profilesMap[otherUserId] || "Unknown User";
-        
-        return {
-          id: m.id,
-          threadId: otherUserId,
-          threadName: threadName,
-          sender: isMe ? "Me" : threadName,
-          text: m.text,
-          time: new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-          isMe: isMe,
-          sharedPost: null,
-          created_at: m.created_at
-        };
-      });
-
-      // Merge remote messages and local messages
-      const existingIds = new Set(remoteFormatted.map(m => m.id));
-      const combined = [...remoteFormatted];
-      localMsgs.forEach(lm => {
-        if (!existingIds.has(lm.id)) {
-          combined.push(lm);
-        }
-      });
-      combined.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
-      setDirectMessages(combined);
-    } catch {
-      setDirectMessages(localMsgs);
+      const { messages } = await api.messages.thread(otherUserId);
+      const existingName = directMessages.find(m => m.threadId === otherUserId)?.threadName || otherUserId;
+      const formatted = messages.map((m: any) => ({
+        id: m.id,
+        threadId: otherUserId,
+        threadName: existingName,
+        sender: m.senderId === user.id ? "Me" : existingName,
+        text: m.content,
+        time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isMe: m.senderId === user.id,
+        sharedPost: null,
+        created_at: m.createdAt
+      }));
+      setDirectMessages(prev => [...prev.filter(m => m.threadId !== otherUserId), ...formatted]);
+    } catch (e) {
+      console.error("Failed to load thread", e);
     }
   };
 
   useEffect(() => {
-    if (user) fetchMessages();
+    if (user) fetchConversations();
   }, [user]);
 
   useEffect(() => {
+    if (user && activeMessageThread) fetchThread(activeMessageThread);
+  }, [activeMessageThread]);
+
+  useEffect(() => {
     if (!user) return;
-    const channel = supabase.channel('realtime_messages')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        const m = payload.new as any;
-        if (m && (m.sender_id === user.id || m.receiver_id === user.id)) {
-          fetchMessages(); 
-        }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user]);
+    return wsClient.subscribe('message:new', (payload: any) => {
+      if (payload?.senderId === user.id || payload?.receiverId === user.id) {
+        fetchConversations();
+        const counterpartId = payload.senderId === user.id ? payload.receiverId : payload.senderId;
+        if (activeMessageThread === counterpartId) fetchThread(counterpartId);
+      }
+    });
+  }, [user, activeMessageThread]);
 
   const [showNotifs, setShowNotifs] = useState(false);
 
@@ -327,34 +246,22 @@ export default function MeetPeanutApp() {
     }
   };
 
-  const handleUserChange = async (currentUser: any) => {
-    if (currentUser) {
-      const { data: d, error } = await supabase.from("profiles").select("*").eq("id", currentUser.id).single();
-      if (d && !error) {
-        setProfile({
-          name: d.full_name || currentUser.user_metadata?.full_name || "User",
-          handle: `@${(d.full_name || currentUser.user_metadata?.full_name || "User").replace(/\s+/g, '').toLowerCase()}`,
-          origin: d.origin || "Unknown",
-          host: d.host || "Unknown",
-          city: d.city || "Unknown",
-          followers: d.followers || 0,
-          following: d.following || 0,
-          bio: d.bio || ""
-        });
-        setUser(currentUser);
-        fetchHostInfo(d.origin, d.host, d.city);
-        fetchFeed(d.origin, d.city, d.host);
-        fetchGoals(currentUser.id);
-        fetchGroups();
-        fetchEvents(d.origin, d.city, d.host);
-      } else {
-        setUser(currentUser);
-        setAuthScreen("setup");
-      }
-    } else {
-      setUser(null);
+  const applySession = (apiProfile: ProfileDto) => {
+    setUser({ id: apiProfile.id, email: apiProfile.email });
+    if (!apiProfile.origin) {
       setProfile(null);
+      setAuthScreen("setup");
+      return;
     }
+    const mapped = mapProfileFromApi(apiProfile);
+    setProfile(mapped);
+    fetchHostInfo(mapped.origin, mapped.host, mapped.city);
+    fetchFeed(mapped.origin, mapped.city, mapped.host);
+    fetchGoals();
+    fetchGroups();
+    fetchEvents();
+    fetchNotifications();
+    wsClient.connect(async () => api.getAccessToken());
   };
 
   const fetchFeed = async (origin?: string, city?: string, host?: string) => {
@@ -362,194 +269,96 @@ export default function MeetPeanutApp() {
     const o = origin || profile?.origin || "USA";
     const c = city || profile?.city || "Berlin";
     const h = host || profile?.host || "Germany";
-    
-    const [postsRes, profileRes, followsRes] = await Promise.all([
-      supabase.from("posts").select("*").or(`privacy.eq.Public,author_id.eq.${user.id}`).order("created_at", { ascending: false }),
-      supabase.from("profiles").select("saved_items").eq("id", user.id).single(),
-      supabase.from("follows").select("following_id").eq("follower_id", user.id)
-    ]);
-    
-    if (!postsRes.error && postsRes.data) {
-      const savedItems = Array.isArray(profileRes.data?.saved_items) ? profileRes.data.saved_items : [];
-      const followingIds = followsRes.data ? followsRes.data.map(f => f.following_id) : [];
-      
-      const mappedPosts = postsRes.data.map((p: any) => {
-        let myReaction = undefined;
-        let isLiked = false;
-        if (Array.isArray(p.likes)) {
-          for (const l of p.likes) {
-            if (typeof l === 'string' && l === user.id) isLiked = true;
-            else if (l.userId === user.id) {
-              isLiked = true;
-              myReaction = l.emoji;
-            }
-          }
-        }
-        
-        return {
-          id: p.id,
-          name: p.author_name || "Community Member",
-          author_id: p.author_id,
-          text: p.content,
-          time: new Date(p.created_at).toLocaleDateString(),
-          likes: Array.isArray(p.likes) ? p.likes.length : 0,
-          liked: isLiked,
-          myReaction,
-          comments: p.comments_count || 0,
-          privacy: p.privacy,
-          tags: p.tags,
-          bgTheme: p.bg_theme,
-          attachment: p.attachment,
-          saved: savedItems.includes(p.id),
-          following: followingIds.includes(p.author_id)
-        };
-      });
+
+    try {
+      const [{ posts }, { users: followingUsers }] = await Promise.all([
+        api.posts.list({}),
+        api.users.following()
+      ]);
+      const followingIds = new Set(followingUsers.map((u: any) => u.id));
+      const mappedPosts = posts.map((p: any) => ({ ...mapPostFromApi(p), following: followingIds.has(p.author?.id) }));
 
       if (mappedPosts.length > 0) {
         setFeed(mappedPosts);
       } else {
-        const dummyPosts = GENERATE_DUMMY_FEED(o, c, h);
-        setFeed(dummyPosts);
+        setFeed(GENERATE_DUMMY_FEED(o, c, h));
       }
+    } catch (e) {
+      console.error("Failed to load feed", e);
+      setFeed(GENERATE_DUMMY_FEED(o, c, h));
     }
   };
 
-  const fetchGoals = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("goals")
-      .select("*, tasks(*)")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true });
-
-    if (!error && data && data.length > 0) {
-      setGoals(data.map((g: any) => {
-        const steps = (g.tasks || []).map((t: any) => {
-          try {
-            const parsed = JSON.parse(t.title);
-            return {
-              id: t.id,
-              t: parsed.t || t.title,
-              d: parsed.d || "",
-              done: !!parsed.done,
-              tool: parsed.tool || "Tasks"
-            };
-          } catch {
-            return {
-              id: t.id,
-              t: t.title,
-              d: "",
-              done: false,
-              tool: "Tasks"
-            };
-          }
-        });
-        return {
-          id: g.id,
-          title: g.title,
-          cat: g.category || "General",
-          icon: Target,
-          steps: steps.length > 0 ? steps : [
-            { t: "Get started", d: "First step on your journey.", done: false, tool: "Tasks" }
-          ]
-        };
-      }));
-    } else {
-      // Create initial goal in database for user
-      const { data: newGoal } = await supabase.from("goals").insert({
-        user_id: userId,
-        title: "Settle into your new city",
-        category: "Documentation"
-      }).select().single();
-
-      if (newGoal) {
-        await supabase.from("tasks").insert([
-          { goal_id: newGoal.id, title: JSON.stringify({ t: "City Registration (Anmeldung)", d: "Book an appointment at the local Bürgeramt.", done: false, tool: "Registration" }) },
-          { goal_id: newGoal.id, title: JSON.stringify({ t: "Open a Local Bank Account", d: "Prepare passport and proof of residence.", done: false, tool: "Banking" }) },
-          { goal_id: newGoal.id, title: JSON.stringify({ t: "Health Insurance Setup", d: "Confirm your statutory or private coverage certificate.", done: false, tool: "Insurance" }) }
-        ]);
-        const { data: freshGoals } = await supabase.from("goals").select("*, tasks(*)").eq("user_id", userId);
-        if (freshGoals) {
-          setGoals(freshGoals.map((g: any) => ({
-            id: g.id,
-            title: g.title,
-            cat: g.category,
-            icon: Target,
-            steps: (g.tasks || []).map((t: any) => {
-              try {
-                const parsed = JSON.parse(t.title);
-                return { id: t.id, t: parsed.t, d: parsed.d, done: !!parsed.done, tool: parsed.tool || "Tasks" };
-              } catch {
-                return { id: t.id, t: t.title, d: "", done: false, tool: "Tasks" };
-              }
-            })
-          })));
-        }
+  const fetchGoals = async () => {
+    try {
+      const { goals: apiGoals } = await api.goals.list();
+      if (apiGoals.length > 0) {
+        setGoals(apiGoals.map((g: any) => ({ ...mapGoalFromApi(g), icon: Target })));
+        return;
       }
+      const { templates } = await api.content.goalTemplates();
+      const tpl = templates[0];
+      if (tpl) {
+        const { goal } = await api.goals.fromTemplate(tpl.id);
+        setGoals([{ ...mapGoalFromApi(goal), icon: Target }]);
+      }
+    } catch (e) {
+      console.error("Failed to load goals", e);
     }
   };
 
   const fetchGroups = async () => {
-    const { data, error } = await supabase.from("groups").select("*, group_members(user_id)");
-    if (!error && data) {
-      setCommunitiesData(data.map((g: any) => ({
+    try {
+      const { groups } = await api.groups.list();
+      setCommunitiesData(groups.map((g: any) => ({
         id: g.id,
         name: g.name,
         desc: g.description,
-        emoji: g.image || (g.category === "Social" ? "🌍" : g.category === "Housing" ? "🏠" : g.category === "Professional" ? "💼" : "🏘️"),
-        members: g.group_members?.length || 0,
-        joined: g.group_members?.some((m: any) => m.user_id === user?.id)
+        emoji: g.emoji || "🏘️",
+        members: g.membersCount || 0,
+        joined: !!g.joined
       })));
+    } catch (e) {
+      console.error("Failed to load groups", e);
     }
   };
 
-  const fetchEvents = async (origin?: string, city?: string, host?: string) => {
-    const { data, error } = await supabase.from("events").select("*");
-    if (!error && data) {
-      // Live events handled in CommunityTab
+  const fetchEvents = async () => {
+    try {
+      await api.events.list();
+      // Live events are fetched and rendered directly inside CommunityTab.
+    } catch (e) {
+      console.error("Failed to load events", e);
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      handleUserChange(session?.user ?? null);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleUserChange(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    (async () => {
+      const restored = await api.auth.refresh();
+      if (!restored) {
+        setUser(null);
+        return;
+      }
+      try {
+        const { profile: apiProfile } = await api.auth.me();
+        applySession(apiProfile);
+      } catch {
+        setUser(null);
+      }
+    })();
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    const channel = supabase.channel(`realtime_app_${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-        fetchFeed();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => {
-        fetchFeed();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, () => {
-        fetchGroups();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, () => {
-        fetchGroups();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'goals', filter: `user_id=eq.${user.id}` }, () => {
-        fetchGoals(user.id);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
-        fetchGoals(user.id);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => {
-        handleUserChange(user);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const unsubs = [
+      wsClient.subscribe('post:new', () => fetchFeed()),
+      wsClient.subscribe('post:deleted', () => fetchFeed()),
+      wsClient.subscribe('comment:new', () => fetchFeed()),
+      wsClient.subscribe('reaction:new', () => fetchFeed()),
+      wsClient.subscribe('group:update', () => fetchGroups()),
+      wsClient.subscribe('invite:new', () => fetchNotifications()),
+    ];
+    return () => unsubs.forEach(u => u());
   }, [user]);
 
   const handleToggleStep = async (goalId: string, stepIndex: number) => {
@@ -567,14 +376,11 @@ export default function MeetPeanutApp() {
     }));
 
     if (user && (targetStep as any).id) {
-      await supabase.from("tasks").update({
-        title: JSON.stringify({
-          t: targetStep.t,
-          d: targetStep.d,
-          done: newDone,
-          tool: targetStep.tool
-        })
-      }).eq("id", (targetStep as any).id);
+      try {
+        await api.goals.updateStep(goalId, (targetStep as any).id, { done: newDone });
+      } catch (e) {
+        console.error("Failed to update step", e);
+      }
     }
   };
 
@@ -588,20 +394,16 @@ export default function MeetPeanutApp() {
     ];
 
     if (user) {
-      const { data: newGoal, error: goalErr } = await supabase.from("goals").insert({
-        user_id: user.id,
-        title: tpl.title,
-        category: tpl.cat || "General"
-      }).select().single();
-
-      if (newGoal && !goalErr) {
-        const tasksPayload = initialSteps.map(s => ({
-          goal_id: newGoal.id,
-          title: JSON.stringify(s)
-        }));
-        await supabase.from("tasks").insert(tasksPayload);
-        await fetchGoals(user.id);
+      try {
+        await api.goals.create({
+          title: tpl.title,
+          category: tpl.cat || "General",
+          steps: initialSteps.map(mapStepToApi)
+        });
+        await fetchGoals();
         return;
+      } catch (e) {
+        console.error("Failed to create goal", e);
       }
     }
 
@@ -621,19 +423,16 @@ export default function MeetPeanutApp() {
     ];
 
     if (user) {
-      const { data: newGoal, error } = await supabase.from("goals").insert({
-        user_id: user.id,
-        title: customTitle.trim(),
-        category: "Custom"
-      }).select().single();
-
-      if (newGoal && !error) {
-        await supabase.from("tasks").insert({
-          goal_id: newGoal.id,
-          title: JSON.stringify(initialSteps[0])
+      try {
+        await api.goals.create({
+          title: customTitle.trim(),
+          category: "Custom",
+          steps: initialSteps.map(mapStepToApi)
         });
-        await fetchGoals(user.id);
+        await fetchGoals();
         return;
+      } catch (e) {
+        console.error("Failed to create goal", e);
       }
     }
 
@@ -657,11 +456,12 @@ export default function MeetPeanutApp() {
     }));
 
     if (user) {
-      await supabase.from("tasks").insert({
-        goal_id: goalId,
-        title: JSON.stringify(newStep)
-      });
-      await fetchGoals(user.id);
+      try {
+        await api.goals.addStep(goalId, mapStepToApi(newStep));
+        await fetchGoals();
+      } catch (e) {
+        console.error("Failed to add task", e);
+      }
     }
   };
 
@@ -670,43 +470,88 @@ export default function MeetPeanutApp() {
     setOpenGoal(null);
 
     if (user) {
-      await supabase.from("tasks").delete().eq("goal_id", goalId);
-      await supabase.from("goals").delete().eq("id", goalId);
+      try {
+        await api.goals.remove(goalId);
+      } catch (e) {
+        console.error("Failed to delete goal", e);
+      }
     }
   };
 
   const handleDemoLogin = async () => {
     setAuthLoading(true);
-    const demoId = "44c35de8-0195-4470-97d1-aad6445abf65";
-    const demoUser = {
-      id: demoId,
-      email: "demo@meet-peanut.app",
-      user_metadata: { full_name: "Demo User" }
-    };
-    await handleUserChange(demoUser);
-    setAuthLoading(false);
+    try {
+      let session;
+      try {
+        session = await api.auth.register(DEMO_EMAIL, DEMO_PASSWORD, "Demo User");
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 409) {
+          session = await api.auth.login(DEMO_EMAIL, DEMO_PASSWORD);
+        } else {
+          throw err;
+        }
+      }
+      api.setSession(session);
+      applySession(session.profile);
+    } catch (err: any) {
+      setToastError(err.message || "Demo login failed");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = () => {
     setAuthLoading(true);
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
-    setAuthLoading(false);
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const g = (window as any).google;
+    if (!clientId || !g?.accounts?.id) {
+      setToastError("Google sign-in isn't configured.");
+      setAuthLoading(false);
+      return;
+    }
+    g.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response: { credential: string }) => {
+        try {
+          const session = await api.auth.google(response.credential);
+          api.setSession(session);
+          applySession(session.profile);
+        } catch (err: any) {
+          setToastError(err.message || "Google sign-in failed");
+        } finally {
+          setAuthLoading(false);
+        }
+      }
+    });
+    g.accounts.id.prompt();
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-    if (error) setToastError(error.message);
-    setAuthLoading(false);
+    try {
+      const session = await api.auth.login(authEmail, authPassword);
+      api.setSession(session);
+      applySession(session.profile);
+    } catch (err: any) {
+      setToastError(err.message || "Login failed");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const handleEmailRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
-    const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword, options: { data: { full_name: authName } } });
-    if (error) setToastError(error.message);
-    setAuthLoading(false);
+    try {
+      const session = await api.auth.register(authEmail, authPassword, authName);
+      api.setSession(session);
+      applySession(session.profile);
+    } catch (err: any) {
+      setToastError(err.message || "Registration failed");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const handleSetupSave = async (
@@ -721,75 +566,65 @@ export default function MeetPeanutApp() {
   ) => {
     if (!user) return;
     setAuthLoading(true);
-    
+
     const finalHost = host === "Other" ? customHost : host;
     const finalCity = city === "Other" ? customCity : city;
-    
-    const profileData = { 
-      id: user.id, 
-      full_name: name, 
-      origin: origin, 
-      host: finalHost, 
-      city: finalCity,
-      bio: `Moving for ${situation}. Currently focused on ${focus}.`,
-      "createdAt": new Date().toISOString(),
-      "updatedAt": new Date().toISOString()
-    };
-    
-    const { error } = await supabase.from("profiles").upsert(profileData);
-    if (!error) {
-      setProfile({ 
-        name: name, 
-        handle: `@${name.replace(/\s+/g, '').toLowerCase()}`, 
-        origin: origin, 
-        host: finalHost, 
-        city: finalCity, 
-        followers: 0, 
-        following: 0, 
-        bio: profileData.bio 
+    const bio = `Moving for ${situation}. Currently focused on ${focus}.`;
+
+    try {
+      const { profile: updated } = await api.users.updateMe({
+        fullName: name,
+        origin,
+        host: finalHost,
+        city: finalCity,
+        bio
       });
+      setProfile(mapProfileFromApi(updated));
       fetchHostInfo(origin, finalHost, finalCity);
       fetchFeed(origin, finalCity, finalHost);
       fetchGroups();
-      fetchEvents(origin, finalCity, finalHost);
-      
-      // Auto-create initial goal based on focus
-      const { data: createdGoal } = await supabase.from("goals").insert({
-        user_id: user.id,
-        title: focus && focus !== "General" ? `Start with ${focus}` : "Settle into your new city",
-        category: focus === "Anmeldung" ? "Documentation" : focus === "Housing" ? "Housing" : "General"
-      }).select().single();
+      fetchEvents();
 
-      if (createdGoal) {
-        await supabase.from("tasks").insert([
-          {
-            goal_id: createdGoal.id,
-            title: JSON.stringify({
-              t: `Research ${focus || 'city registration'} in ${finalCity}`,
-              d: `Check official requirements, needed documents, and book an appointment in ${finalCity}.`,
-              done: false,
+      // Auto-create initial goal based on focus
+      try {
+        await api.goals.create({
+          title: focus && focus !== "General" ? `Start with ${focus}` : "Settle into your new city",
+          category: focus === "Anmeldung" ? "Documentation" : focus === "Housing" ? "Housing" : "General",
+          steps: [
+            {
+              text: `Research ${focus || 'city registration'} in ${finalCity}`,
+              description: `Check official requirements, needed documents, and book an appointment in ${finalCity}.`,
               tool: "Registration"
-            })
-          },
-          {
-            goal_id: createdGoal.id,
-            title: JSON.stringify({
-              t: `Set up local bank and tax ID`,
-              d: `Prepare passport and proof of residence.`,
-              done: false,
+            },
+            {
+              text: `Set up local bank and tax ID`,
+              description: `Prepare passport and proof of residence.`,
               tool: "Banking"
-            })
-          }
-        ]);
-        await fetchGoals(user.id);
+            }
+          ]
+        });
+        await fetchGoals();
+      } catch (e) {
+        console.error("Failed to create initial goal", e);
       }
       setAuthScreen("");
-    } else setToastError(error.message);
-    setAuthLoading(false);
+    } catch (err: any) {
+      setToastError(err.message || "Could not save profile");
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try {
+      await api.auth.logout();
+    } catch {
+      /* ignore */
+    }
+    api.clearSession();
+    wsClient.disconnect();
+    setUser(null);
+    setProfile(null);
     setAuthScreen("intro");
     setTab("home");
   };
@@ -797,7 +632,7 @@ export default function MeetPeanutApp() {
   const toggleLike = async (post: Post) => {
     if (!user) return;
     const isLiked = post.liked;
-    
+
     setFeed(f => f.map(p => {
       if (p.id === post.id) {
         return { ...p, liked: !isLiked, myReaction: undefined, likes: isLiked ? p.likes - 1 : (p.myReaction ? p.likes : p.likes + 1) };
@@ -805,52 +640,48 @@ export default function MeetPeanutApp() {
       return p;
     }));
 
-    const { data: currentPost } = await supabase.from('posts').select('likes').eq('id', post.id).single();
-    let currentLikes = currentPost?.likes || [];
-    if (!Array.isArray(currentLikes)) currentLikes = [];
-    
-    let newLikes = [...currentLikes];
-    newLikes = newLikes.filter((l: any) => typeof l === 'string' ? l !== user.id : l.userId !== user.id);
-    
-    if (!isLiked) {
-      newLikes.push(user.id);
+    try {
+      if (isLiked) await api.posts.unreact(post.id);
+      else await api.posts.react(post.id, "👍");
+    } catch (e) {
+      console.error("Failed to update reaction", e);
     }
-    await supabase.from('posts').update({ likes: newLikes }).eq('id', post.id);
   };
-  
+
   const toggleSave = async (id: string) => {
     if (!user) return;
+    const post = feed.find(p => p.id === id);
     setFeed(f => f.map(p => p.id === id ? { ...p, saved: !p.saved } : p));
-    const { data: currentProfile } = await supabase.from('profiles').select('saved_items').eq('id', user.id).single();
-    let savedItems = currentProfile?.saved_items || [];
-    if (!Array.isArray(savedItems)) savedItems = [];
-    
-    let newSavedItems = [...savedItems];
-    if (newSavedItems.includes(id)) {
-      newSavedItems = newSavedItems.filter((i: any) => i !== id);
-    } else {
-      newSavedItems.push(id);
+    try {
+      if (post?.saved) await api.posts.unsave(id);
+      else await api.posts.save(id);
+    } catch (e) {
+      console.error("Failed to update saved post", e);
     }
-    await supabase.from('profiles').update({ saved_items: newSavedItems }).eq('id', user.id);
   };
 
   const toggleFollow = async (id: string) => {
     if (!user) return;
     const post = feed.find(p => p.id === id);
     if (!post || !(post as any).author_id) return;
-    
+
     setFeed(f => f.map(p => ((p as any).author_id === (post as any).author_id || p.name === post.name) ? { ...p, following: !p.following } : p));
-    
-    if (post.following) {
-      await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', (post as any).author_id);
-    } else {
-      await supabase.from('follows').insert({ follower_id: user.id, following_id: (post as any).author_id });
+
+    try {
+      if (post.following) await api.users.unfollow((post as any).author_id);
+      else await api.users.follow((post as any).author_id);
+    } catch (e) {
+      console.error("Failed to update follow", e);
     }
   };
 
   const deletePost = async (id: string) => {
     setFeed(f => f.filter(p => p.id !== id));
-    await supabase.from('posts').delete().eq('id', id);
+    try {
+      await api.posts.remove(id);
+    } catch (e) {
+      console.error("Failed to delete post", e);
+    }
   };
 
   const addReaction = async (id: string, emoji: string) => {
@@ -867,15 +698,11 @@ export default function MeetPeanutApp() {
       return p;
     }));
 
-    const { data: currentPost } = await supabase.from('posts').select('likes').eq('id', id).single();
-    let currentLikes = currentPost?.likes || [];
-    if (!Array.isArray(currentLikes)) currentLikes = [];
-    
-    let newLikes = [...currentLikes];
-    newLikes = newLikes.filter((l: any) => typeof l === 'string' ? l !== user.id : l.userId !== user.id);
-    newLikes.push({ userId: user.id, emoji });
-    
-    await supabase.from('posts').update({ likes: newLikes }).eq('id', id);
+    try {
+      await api.posts.react(id, emoji);
+    } catch (e) {
+      console.error("Failed to add reaction", e);
+    }
   };
 
   const handleShareToMessenger = (post: Post) => {
@@ -984,47 +811,10 @@ export default function MeetPeanutApp() {
       return updated;
     });
 
-    // Safely sync with Supabase if both are valid UUIDs and authenticated session matches user
-    if (isUuid(user.id) && isUuid(otherUserId)) {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const session = sessionData?.session;
-        if (session && session.user?.id === user.id) {
-          let { data: rooms, error: roomFindErr } = await supabase
-            .from('chat_rooms')
-            .select('id, participants')
-            .contains('participants', [session.user.id]);
-            
-          let roomId = rooms?.find(r => r.participants?.includes(otherUserId))?.id;
-          
-          if (!roomId && !roomFindErr) {
-            const { data: newRoom, error: createError } = await supabase
-              .from('chat_rooms')
-              .insert({ participants: [session.user.id, otherUserId] })
-              .select()
-              .single();
-              
-            if (!createError && newRoom) {
-              roomId = newRoom.id;
-            } else if (createError) {
-              console.info("Using local chat session (room sync skipped):", createError.message);
-            }
-          }
-          
-          if (roomId) {
-            const { error: msgErr } = await supabase.from('messages').insert({
-              sender_id: session.user.id,
-              chat_room_id: roomId,
-              text: msgText
-            });
-            if (msgErr) {
-              console.info("Message saved locally (remote sync skipped):", msgErr.message);
-            }
-          }
-        }
-      } catch (err) {
-        console.info("Local message persisted. Supabase sync bypassed:", err);
-      }
+    try {
+      await api.messages.send(otherUserId, msgText);
+    } catch (err) {
+      setToastError("Message failed to send.");
     }
 
     // Interactive realistic simulated responses from community contacts
@@ -1159,8 +949,8 @@ export default function MeetPeanutApp() {
               profile={profile!} welcomeMessage={welcomeMessage} setTab={setTab} feed={feed} user={user} T={T} 
               activeComments={activeComments} setActiveComments={setActiveComments} activeReactions={activeReactions} setActiveReactions={setActiveReactions} 
               activeShare={activeShare} setActiveShare={setActiveShare} activeOptions={activeOptions} setActiveOptions={setActiveOptions} 
-              isCreatePostOpen={isCreatePostOpen} setIsCreatePostOpen={setIsCreatePostOpen} setMessengerOpen={setMessengerOpen} 
-              toggleLike={toggleLike} toggleFollow={toggleFollow} deletePost={deletePost} addReaction={addReaction} 
+              isCreatePostOpen={isCreatePostOpen} setIsCreatePostOpen={setIsCreatePostOpen} setMessengerOpen={setMessengerOpen} onPosted={fetchFeed}
+              toggleLike={toggleLike} toggleFollow={toggleFollow} deletePost={deletePost} addReaction={addReaction}
               handleShareToMessenger={handleShareToMessenger} toggleSave={toggleSave}
               notifications={notifications} setNotifications={setNotifications} showNotifs={showNotifs} setShowNotifs={setShowNotifs}
             />
@@ -1193,10 +983,10 @@ export default function MeetPeanutApp() {
                 setActiveMessageThread(id);
                 setMessengerOpen(true);
                 let threadName = name;
-                if (!threadName && isUuid(id)) {
+                if (!threadName) {
                   try {
-                    const { data } = await supabase.from('profiles').select('full_name').eq('id', id).single();
-                    if (data?.full_name) threadName = data.full_name;
+                    const { profile: other } = await api.users.get(id);
+                    if (other?.name) threadName = other.name;
                   } catch {}
                 }
                 if (!threadName) {
