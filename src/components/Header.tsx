@@ -2,6 +2,8 @@ import React from "react";
 import { ArrowLeft } from "lucide-react";
 import { Theme } from "../types";
 import { SAF } from "../constants";
+import meetPeanutLogo from "../assets/images/meetpeanut-logo.jpeg";
+import meetPeanutIcon from "../assets/images/meetpeanut-icon.jpeg";
 
 export const PeanutLogo = ({ size = 24, className = "", monochrome = false }: { size?: number, className?: string, monochrome?: boolean }) => {
   const outlineColor = monochrome ? "currentColor" : "#FF5C00";
@@ -47,22 +49,17 @@ export const Face = ({ h = 22, color = "#fff" }: { h?: number; color?: string })
 );
 
 export const AppIcon = ({ size = 56 }: { size?: number }) => (
-  <div className="rounded-2xl flex items-center justify-center shadow-md bg-white overflow-hidden" style={{ width: size, height: size }}>
-    <div className="flex items-center">
-      <span className="font-extrabold tracking-tight" style={{ color: "#333", fontFamily: "'Baloo 2', cursive", fontSize: size * 0.45 }}>m</span>
-      <span className="font-extrabold tracking-tight" style={{ color: "#FA5C38", fontFamily: "'Baloo 2', cursive", fontSize: size * 0.45 }}>p</span>
-    </div>
+  <div className="rounded-2xl shadow-md bg-white overflow-hidden" style={{ width: size, height: size }}>
+    <img src={meetPeanutIcon} alt="Meet Peanut" className="w-full h-full object-cover" />
   </div>
 );
 
 export const Logo = ({ onSaffron = false, onClick }: { onSaffron?: boolean; onClick?: () => void }) => (
-  <div className={`flex items-center gap-1 ${onClick ? 'cursor-pointer' : ''}`} onClick={onClick}>
-    <span className="font-extrabold text-[32px] tracking-tighter" style={{ color: onSaffron ? "#fff" : "#333", fontFamily: "'Baloo 2', cursive", lineHeight: "1" }}>
-      meet
-    </span>
-    <span className="font-extrabold text-[32px] tracking-tighter" style={{ color: onSaffron ? "#ffeae6" : "#FA5C38", fontFamily: "'Baloo 2', cursive", lineHeight: "1" }}>
-      peanut
-    </span>
+  <div
+    className={`inline-flex items-center rounded-xl bg-white px-2 py-1 ${onClick ? 'cursor-pointer' : ''}`}
+    onClick={onClick}
+  >
+    <img src={meetPeanutLogo} alt="Meet Peanut" className="h-6 w-auto object-contain" />
   </div>
 );
 

@@ -2,6 +2,7 @@ import React from "react";
 import { Globe2, ArrowLeft } from "lucide-react";
 import { LOCATIONS } from "../constants";
 import { Theme } from "../types";
+import meetPeanutIcon from "../assets/images/meetpeanut-icon.jpeg";
 
 interface AuthFlowProps {
   authScreen: string;
@@ -55,17 +56,7 @@ export const AuthFlow = ({
 }: AuthFlowProps) => {
   if (authScreen === "intro") return (
     <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 ${T.bg} text-center`}>
-      <div className="rounded-2xl flex items-center justify-center shadow-md bg-orange-500 w-20 h-20 mb-6">
-        <svg height={32} viewBox="0 0 170 140" fill="none" style={{ display: "block" }}>
-          <path d="M16 27 Q40 7 64 27" stroke="#fff" strokeWidth="14" strokeLinecap="round" />
-          <path d="M106 27 Q130 7 154 27" stroke="#fff" strokeWidth="14" strokeLinecap="round" />
-          <circle cx="40" cy="64" r="23" stroke="#fff" strokeWidth="15" />
-          <circle cx="130" cy="64" r="23" stroke="#fff" strokeWidth="15" />
-          <line x1="85" y1="36" x2="85" y2="90" stroke="#fff" strokeWidth="15" strokeLinecap="round" />
-          <path d="M32 106 Q85 141 138 106" stroke="#fff" strokeWidth="13" strokeLinecap="round" />
-        </svg>
-      </div>
-      <h1 className={`disp font-bold text-3xl ${T.text}`}>Welcome to buonôlô</h1>
+      <img src={meetPeanutIcon} alt="Meet Peanut" className="h-40 w-40 object-contain mb-2" />
       <p className={`mt-2 ${T.sub}`}>Your companion for settling in Germany with confidence.</p>
       <div className="w-full mt-10 space-y-3 max-w-sm">
         <button onClick={handleGoogleLogin} disabled={authLoading} className="w-full bg-white text-gray-800 border border-gray-200 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 shadow-sm hover:bg-gray-50 transition-colors">
@@ -120,7 +111,7 @@ export const AuthFlow = ({
     <div className={`fixed inset-0 z-50 flex flex-col ${T.bg}`}>
       <div className="p-6 text-center">
         <h1 className={`disp font-bold text-2xl ${T.text}`}>Welcome, {authName.split(' ')[0]}!</h1>
-        <p className={`mt-1 text-sm ${T.sub}`}>Let's tailor buonôlô to your journey.</p>
+        <p className={`mt-1 text-sm ${T.sub}`}>Let's tailor Meet Peanut to your journey.</p>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); setAuthScreen("assessment"); }} className="px-6 space-y-4 max-w-md mx-auto w-full overflow-y-auto pb-12 no-scrollbar">
         <div>
