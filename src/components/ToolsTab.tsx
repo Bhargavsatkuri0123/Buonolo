@@ -8,6 +8,7 @@ import {
 import { Header } from "./Header";
 import { Theme, Profile } from "../types";
 import { api, mapStepToApi } from "../api";
+import { LocalServicesHub } from "./LocalServicesHub";
 
 interface ToolDetailProps {
   tool: any;
@@ -663,6 +664,24 @@ export const ToolsTab = ({ openTool, setOpenTool, toolSectionsData, profile, eme
   const selectedToolObj = toolSectionsData.flatMap(s => s.items).find(i => i.name === openTool) || { name: openTool };
 
   if (openTool) {
+    if (
+      openTool === "Local Services & Immigrant Essentials" || 
+      openTool === "Local Services" || 
+      openTool === "Essential Services & Local Trades" ||
+      (typeof openTool === "string" && openTool.toLowerCase().includes("local services"))
+    ) {
+      return (
+        <LocalServicesHub
+          profile={profile}
+          T={T}
+          onBack={() => setOpenTool(null)}
+          setGoals={setGoals}
+          setTab={setTab}
+          user={user}
+        />
+      );
+    }
+
     return (
       <ToolDetail 
         tool={selectedToolObj} 
