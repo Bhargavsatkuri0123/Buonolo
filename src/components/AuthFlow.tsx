@@ -57,7 +57,6 @@ export const AuthFlow = ({
   if (authScreen === "intro") return (
     <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 ${T.bg} text-center`}>
       <img src={meetPeanutIcon} alt="Meet Peanut" className="h-40 w-40 object-contain mb-2" />
-      <p className={`mt-2 ${T.sub}`}>Your companion for settling in Germany with confidence.</p>
       <div className="w-full mt-10 space-y-3 max-w-sm">
         <button onClick={handleGoogleLogin} disabled={authLoading} className="w-full bg-white text-gray-800 border border-gray-200 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 shadow-sm hover:bg-gray-50 transition-colors">
           <Globe2 size={20} /> Continue with Google
