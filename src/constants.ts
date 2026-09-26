@@ -1,4 +1,4 @@
-import { Map, FileText, KeyRound, CreditCard, Languages, Car, Briefcase, Stethoscope, Users, Building, Scale, BookOpen, GraduationCap, Store, Heart, Church, Dumbbell, AlertTriangle, MessageCircle, Gavel, Handshake, Globe } from "lucide-react";
+import { Map, FileText, KeyRound, CreditCard, Languages, Car, Briefcase, Stethoscope, Users, Building, Scale, BookOpen, GraduationCap, Store, Heart, Church, Dumbbell, AlertTriangle, MessageCircle, Gavel, Handshake, Globe, Target, Wrench, LucideIcon } from "lucide-react";
 
 export const LOCATIONS: Record<string, string[]> = {
   "Argentina": ["Buenos Aires", "Córdoba", "Rosario", "Mendoza", "Other"],
@@ -38,90 +38,13 @@ export const LOCATIONS: Record<string, string[]> = {
 
 export const LANGS = ["English", "Deutsch", "हिन्दी", "Türkçe", "العربية", "Español", "Português", "Polski"];
 
-export const GENERATE_DUMMY_COMMUNITIES = (origin: string, city: string, host: string) => [
-  { 
-    id: "c1", 
-    name: `${city} Expats`, 
-    members: "12.4k", 
-    emoji: "🌍", 
-    category: "General", 
-    joined: true,
-    creator_name: "Sarah Miller",
-    creator_id: "p1",
-    admin_name: "Sarah Miller",
-    admin_ids: ["p1", "p2"],
-    desc: `The central hub for all international newcomers, students, and professionals in ${city}. Meet peers, get registration tips, and find weekend events!`
-  },
-  { 
-    id: "c2", 
-    name: `${origin} Expats in ${host}`, 
-    members: "8.2k", 
-    emoji: "🤝", 
-    category: "Social", 
-    joined: false,
-    creator_name: "Carlos Ramos",
-    creator_id: "p4",
-    admin_name: "Carlos Ramos",
-    admin_ids: ["p4"],
-    desc: `Dedicated support and cultural exchange network for ${origin} nationals settling in ${host}.`
-  },
-  { 
-    id: "c3", 
-    name: `Foodies of ${city}`, 
-    members: "3.1k", 
-    emoji: "🥑", 
-    category: "Lifestyle", 
-    joined: false,
-    creator_name: "Elena Rossi",
-    creator_id: "p3",
-    admin_name: "Elena Rossi",
-    admin_ids: ["p3"],
-    desc: `Discover authentic restaurants, international grocery stores, and hidden culinary gems around ${city}.`
-  },
-];
-
-export const DUMMY_COMMUNITIES = GENERATE_DUMMY_COMMUNITIES("USA", "Berlin", "Germany");
-
-export const GENERATE_DUMMY_EVENTS = (origin: string, city: string, host: string) => [
-  { id: "e1", title: "Language Exchange Mixer", date: "Tomorrow, 7:00 PM", location: `Central Cafe, ${city}`, attendees: 24, image: "🗣️", joined: false },
-  { id: "e2", title: `Expats from ${origin} Meetup`, date: "Friday, 6:30 PM", location: `Downtown ${city}`, attendees: 56, image: "🎉", joined: true },
-  { id: "e3", title: `Sunday Park Picnic in ${city}`, date: "Sunday, 2:00 PM", location: `City Park, ${city}`, attendees: 12, image: "🧺", joined: false },
-];
-
-export const DUMMY_EVENTS = GENERATE_DUMMY_EVENTS("USA", "Berlin", "Germany");
-
-export const GENERATE_DUMMY_PEOPLE = (origin: string, city: string, host: string) => [
-  { id: "p1", name: "Sarah Miller", origin: "USA", bio: `Moved to ${city} 2 months ago. Product Designer.`, avatar: "SM" },
-  { id: "p2", name: "Ahmed Khan", origin: origin, bio: `Software Engineer from ${origin}, enjoying ${host}.`, avatar: "AK" },
-  { id: "p3", name: "Elena Rossi", origin: "Italy", bio: `Art lover and coffee enthusiast exploring ${city}.`, avatar: "ER" },
-];
-
-export const DUMMY_PEOPLE = GENERATE_DUMMY_PEOPLE("USA", "Berlin", "Germany"); // Fallback
-
-export const GENERATE_GOAL_TEMPLATES = (origin: string, city: string, host: string) => [
-  { id: "t1", icon: FileText, title: `Register your address in ${city}`, cat: "Documentation", weeks: "1–3 weeks" },
-  { id: "t2", icon: KeyRound, title: `Find long-term housing in ${city}`, cat: "Housing", weeks: "4–12 weeks" },
-  { id: "t3", icon: CreditCard, title: `Open a ${host} bank account`, cat: "Finance", weeks: "1 week" },
-  { id: "t4", icon: Languages, title: "Reach A2 in the local language", cat: "Language", weeks: "3–6 months" },
-  { id: "t5", icon: Car, title: `Convert your ${origin} driving license`, cat: "Mobility", weeks: "4–8 weeks" },
-  { id: "t6", icon: Briefcase, title: "Find your first local job", cat: "Career", weeks: "2–6 months" },
-  { id: "t7", icon: Stethoscope, title: "Set up health insurance & a doctor", cat: "Health", weeks: "1–2 weeks" },
-  { id: "t8", icon: Users, title: "Build a local support circle", cat: "Community", weeks: "ongoing" },
-];
-
-export const GOAL_TEMPLATES = GENERATE_GOAL_TEMPLATES("USA", "Berlin", "Germany"); // Fallback
+// Maps a backend GoalTemplate's `iconName` to the matching lucide-react icon
+// component, since the API only returns the name as a string.
+export const GOAL_ICONS: Record<string, LucideIcon> = {
+  FileText, KeyRound, CreditCard, Languages, Car, Briefcase, Stethoscope, Users, Wrench, Target
+};
 
 export const SAF = "linear-gradient(135deg,#FFB43A 0%,#FF8A00 55%,#F26A00 100%)";
-
-export const GENERATE_DUMMY_FEED = (origin: string, city: string, host: string): any[] => [
-  { id: "f1", name: "Sarah Miller", text: `Just got my registration done in ${city}! It was easier than expected. If anyone needs tips on the ${host} process, let me know!`, time: "2h ago", likes: 12, liked: false, comments: 3, privacy: "Public", tags: [city, "Registration"] },
-  { id: "f2", name: "Elena Rossi", text: `Found this amazing little cafe in ${city} that actually tastes like home ☕️`, time: "5h ago", likes: 45, liked: true, comments: 8, privacy: "Public", tags: ["Food", city] },
-  { id: "f3", name: "Ahmed Khan", text: `Does anyone know a good ${origin}-friendly tax consultant in ${city}? The local forms are overwhelming.`, time: "1d ago", likes: 8, liked: false, comments: 12, privacy: "Friends", tags: ["Help", "Taxes"] },
-  { id: "f4", name: "James Wei", text: `Does anyone know how long visa processing takes right now in ${host}? I applied 6 weeks ago.`, time: "1d ago", likes: 8, liked: false, comments: 14, privacy: "Public", tags: ["Visa", host] },
-  { id: "f5", name: "Maria Garcia", text: `Hosted my first dinner party in the new apartment in ${city}! 🍷`, time: "2d ago", likes: 45, liked: true, comments: 5, privacy: "Public", tags: ["Food", "MovingIn"], bgTheme: "bg-gradient-to-r from-orange-400 to-red-500" }
-];
-
-export const DUMMY_FEED = GENERATE_DUMMY_FEED("USA", "Berlin", "Germany");
 
 export const TEMPLATE_HOST_INFO = (origin: string, city: string, host: string) => ({
   welcomeMessage: `Welcome to ${city}! Getting settled in ${host} can be challenging, but we're here to help you every step of the way.`,

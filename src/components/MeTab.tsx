@@ -6,7 +6,7 @@ import { Theme, Profile, Post } from "../types";
 import { LOCATIONS, LANGS, SAF } from "../constants";
 import { GroupView, EventView, UserView } from "./CommunityTab";
 import { InAppNewsViewer } from "./InAppNewsViewer";
-import { supabase } from "../../supabase";
+import { api } from "../api";
 
 interface MeTabProps {
   meScreen: string;
@@ -216,11 +216,11 @@ export const MeTab = ({
               const result = await fetchHostInfo(profile.origin, finalHost, finalCity);
               if (result.success) {
                 if (user) {
-                  await supabase.from('profiles').update({
-                    host: finalHost,
-                    city: finalCity,
-                    updatedAt: new Date().toISOString()
-                  }).eq('id', user.id);
+                  try {
+                    await api.users.updateMe({ host: finalHost, city: finalCity });
+                  } catch (e) {
+                    console.error("Failed to update host", e);
+                  }
                 }
                 setProfile({ ...profile, host: finalHost, city: finalCity });
               } else {
@@ -486,7 +486,8 @@ export const MeTab = ({
     const handleLeaveAllGroups = async () => {
       if (confirm("Are you sure you want to leave all joined communities?")) {
         if (user) {
-          await supabase.from("group_members").delete().eq("user_id", user.id);
+          const joined = communitiesData.filter((c: any) => c.joined);
+          await Promise.allSettled(joined.map((c: any) => api.groups.leave(c.id)));
         }
         setShowSettings(false);
         setMeScreen("root");
@@ -596,14 +597,17 @@ const EditProfileScreen = () => {
       }
 
       if (user) {
-        await supabase.from('profiles').update({
-          full_name: formData.name,
-          origin: formData.origin,
-          host: finalHost,
-          city: finalCity,
-          bio: formData.bio,
-          updatedAt: new Date().toISOString()
-        }).eq('id', user.id);
+        try {
+          await api.users.updateMe({
+            fullName: formData.name,
+            origin: formData.origin,
+            host: finalHost,
+            city: finalCity,
+            bio: formData.bio
+          });
+        } catch (e) {
+          console.error("Failed to update profile", e);
+        }
       }
 
       setProfile({ ...formData, host: finalHost, city: finalCity });

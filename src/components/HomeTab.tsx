@@ -2,7 +2,7 @@ import React from "react";
 import { Search, MessageCircle, Bell, ImageIcon, Users as UsersIcon, Globe, MoreHorizontal, Trash, MessageSquare, Share2, Bookmark, Send, Target, Share } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Header, PeanutLogo } from "./Header";
-import { supabase } from "../../supabase";
+import { api } from "../api";
 import { CreatePostModal } from "./CreatePostModal";
 import { LikeButton } from "./LikeButton";
 import { CommentSection } from "./CommentSection";
@@ -27,6 +27,7 @@ interface HomeTabProps {
   isCreatePostOpen: boolean;
   setIsCreatePostOpen: (val: boolean) => void;
   setMessengerOpen: (val: boolean) => void;
+  onPosted?: () => void;
   toggleLike: (p: Post) => void;
   toggleFollow: (id: string) => void;
   deletePost: (id: string) => void;
@@ -43,7 +44,7 @@ export const HomeTab = ({
   profile, welcomeMessage, setTab, feed, user, T,
   activeComments, setActiveComments, activeReactions, setActiveReactions,
   activeShare, setActiveShare, activeOptions, setActiveOptions,
-  isCreatePostOpen, setIsCreatePostOpen, setMessengerOpen,
+  isCreatePostOpen, setIsCreatePostOpen, setMessengerOpen, onPosted,
   toggleLike, toggleFollow, deletePost, addReaction, handleShareToMessenger, toggleSave,
   notifications, setNotifications, showNotifs, setShowNotifs
 }: HomeTabProps) => {
@@ -51,7 +52,7 @@ export const HomeTab = ({
 
   return (
     <div className="pb-24">
-      <CreatePostModal isOpen={isCreatePostOpen} onClose={() => setIsCreatePostOpen(false)} profile={profile} user={user} T={T} />
+      <CreatePostModal isOpen={isCreatePostOpen} onClose={() => setIsCreatePostOpen(false)} onPosted={onPosted} profile={profile} user={user} T={T} />
       <Header T={T} right={
         <div className="flex gap-2">
           <button className={`p-2 rounded-full ${T.card}`}><Search size={18} className={T.text} /></button>
@@ -72,7 +73,7 @@ export const HomeTab = ({
               <button onClick={async () => { 
                 setNotifications(prev => prev.map(n => ({ ...n, read: true }))); 
                 setShowNotifs(false); 
-                if (user) await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id);
+                if (user) await api.notifications.readAll();
               }} className="text-xs text-orange-500 font-semibold">Mark all as read</button>
             </div>
             <div className="overflow-y-auto no-scrollbar flex-1">

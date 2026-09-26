@@ -1,14 +1,17 @@
 import { LucideIcon } from "lucide-react";
 
 export interface Profile {
+  id?: string;
   name: string;
   handle: string;
+  email?: string;
   origin: string;
   host: string;
   city: string;
   followers: number;
   following: number;
   bio: string;
+  notificationsEnabled?: boolean;
 }
 
 export interface Post {
