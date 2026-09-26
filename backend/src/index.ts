@@ -48,5 +48,5 @@ const server = http.createServer(app);
 initWebSocketGateway(server);
 
 server.listen(env.port, "0.0.0.0", () => {
-  console.log(`Buonolo backend listening on port ${env.port}`);
+  console.log(`Meet Peanut backend listening on port ${env.port}`);
 });

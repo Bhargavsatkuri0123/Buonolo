@@ -46,7 +46,7 @@ usersRouter.get(
     if (!user) throw new HttpError(404, "User not found");
     const { passwordHash, ...safeUser } = user;
 
-    res.setHeader("Content-Disposition", "attachment; filename=buonolo-data-export.json");
+    res.setHeader("Content-Disposition", "attachment; filename=meet-peanut-data-export.json");
     res.json({
       exportedAt: new Date().toISOString(),
       user: safeUser,

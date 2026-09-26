@@ -2,7 +2,7 @@ const fs = require('fs');
 let code = fs.readFileSync('App.tsx', 'utf8');
 
 const target = `  const [notifications, setNotifications] = useState<any[]>([
-    { id: 1, title: "Welcome to Buonolo!", body: "We're here to help you settle in. Explore the roadmap to get started.", time: "Now", read: false, type: "system" },
+    { id: 1, title: "Welcome to Meet Peanut!", body: "We're here to help you settle in. Explore the roadmap to get started.", time: "Now", read: false, type: "system" },
     { id: 2, title: "Goal Update", body: "You've completed 2 steps in 'Register your address'. Keep going!", time: "2h ago", read: true, type: "goal" }
   ]);`;
 

@@ -1,8 +1,31 @@
 name: Build and deploy
 
+# Reusable build + deploy used by build-dev.yml and build-qa.yml. Per-environment
+# settings come from the matching GitHub Environment ("dev" / "qa") as variables:
+#   DEPLOY_HOST, DEPLOY_PATH, AWS_ROLE_ARN, NGINX_CONF_FILE
+# qa falls back to the values this workflow originally hard-coded; dev has no
+# fallbacks so it can't accidentally deploy onto the qa box.
+
 on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment (dev or qa)
+        required: true
+        type: string
+      ref:
+        description: Branch, tag or SHA to build
+        required: false
+        type: string
+        default: main
   workflow_dispatch:
     inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [dev, qa]
+        default: dev
       ref:
         description: Branch or tag to deploy
         required: false
@@ -12,17 +35,68 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: eu-west-2
   ECR_REGISTRY: 940127591852.dkr.ecr.eu-west-2.amazonaws.com
   ECR_REPOSITORY: buonolo
-  DEPLOY_HOST: 13.40.179.189
   DEPLOY_USER: ubuntu
-  DEPLOY_PATH: /opt/buonolo
 
 jobs:
-  build-and-push:
+  config:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      deploy_host: ${{ steps.cfg.outputs.deploy_host }}
+      deploy_path: ${{ steps.cfg.outputs.deploy_path }}
+      aws_role_arn: ${{ steps.cfg.outputs.aws_role_arn }}
+      nginx_conf_file: ${{ steps.cfg.outputs.nginx_conf_file }}
+    steps:
+      - id: cfg
+        env:
+          TARGET_ENV: ${{ inputs.environment }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          NGINX_CONF_FILE: ${{ vars.NGINX_CONF_FILE }}
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENV" in
+            qa)
+              : "${DEPLOY_HOST:=13.40.179.189}"
+              : "${DEPLOY_PATH:=/opt/buonolo}"
+              : "${AWS_ROLE_ARN:=arn:aws:iam::940127591852:role/codebuild-buonolo_dev-service-role}"
+              : "${NGINX_CONF_FILE:=nginx.qa.conf}"
+              ;;
+            dev)
+              : "${NGINX_CONF_FILE:=nginx.conf}"
+              ;;
+            *)
+              echo "::error::Unknown environment '$TARGET_ENV' (expected dev or qa)"; exit 1
+              ;;
+          esac
+          missing=0
+          for v in DEPLOY_HOST DEPLOY_PATH AWS_ROLE_ARN; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Set the '$v' variable on the '$TARGET_ENV' GitHub Environment"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          {
+            echo "deploy_host=$DEPLOY_HOST"
+            echo "deploy_path=$DEPLOY_PATH"
+            echo "aws_role_arn=$AWS_ROLE_ARN"
+            echo "nginx_conf_file=$NGINX_CONF_FILE"
+          } >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    needs: config
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     outputs:
       image_tag: ${{ steps.tag.outputs.image_tag }}
     steps:
@@ -30,12 +104,15 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
+      # Tags are namespaced per environment because the nginx image bakes in an
+      # environment-specific config; docker-compose.prod.yml resolves
+      # "<component>-${IMAGE_TAG}", so IMAGE_TAG is "<env>-<sha>".
       - id: tag
-        run: echo "image_tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: echo "image_tag=${{ inputs.environment }}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::940127591852:role/codebuild-buonolo_dev-service-role
+          role-to-assume: ${{ needs.config.outputs.aws_role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - uses: aws-actions/amazon-ecr-login@v2
@@ -43,29 +120,32 @@ jobs:
       - name: Build and push backend image
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
+          TARGET_ENV: ${{ inputs.environment }}
         run: |
           docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:backend-$IMAGE_TAG" \
-                       -t "$ECR_REGISTRY/$ECR_REPOSITORY:backend-latest" \
+                       -t "$ECR_REGISTRY/$ECR_REPOSITORY:backend-$TARGET_ENV-latest" \
                        ./backend
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:backend-$IMAGE_TAG"
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:backend-latest"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:backend-$TARGET_ENV-latest"
 
       - name: Build and push nginx (web) image
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
+          TARGET_ENV: ${{ inputs.environment }}
         run: |
           docker build -f nginx/Dockerfile \
-                       --build-arg NGINX_CONF_FILE=nginx.qa.conf \
+                       --build-arg NGINX_CONF_FILE=${{ needs.config.outputs.nginx_conf_file }} \
                        --build-arg VITE_GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
                        -t "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-$IMAGE_TAG" \
-                       -t "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-latest" \
+                       -t "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-$TARGET_ENV-latest" \
                        .
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-$IMAGE_TAG"
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-latest"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:nginx-$TARGET_ENV-latest"
 
   deploy:
-    needs: build-and-push
+    needs: [config, build-and-push]
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,22 +154,22 @@ jobs:
       - name: Upload docker-compose files
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ env.DEPLOY_HOST }}
+          host: ${{ needs.config.outputs.deploy_host }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           source: docker-compose.yml,docker-compose.prod.yml
-          target: ${{ env.DEPLOY_PATH }}
+          target: ${{ needs.config.outputs.deploy_path }}
           strip_components: 0
 
       - name: Pull images and restart stack
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ env.DEPLOY_HOST }}
+          host: ${{ needs.config.outputs.deploy_host }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -euo pipefail
-            cd ${{ env.DEPLOY_PATH }}
+            cd ${{ needs.config.outputs.deploy_path }}
             aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
               docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
             export IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}

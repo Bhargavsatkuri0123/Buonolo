@@ -44,7 +44,7 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
               if (navigator.share) {
                 await navigator.share({
                   title: selectedEvent.title,
-                  text: `Check out this event: ${selectedEvent.title} on Buonolo!`,
+                  text: `Check out this event: ${selectedEvent.title} on Meet Peanut!`,
                   url: window.location.href
                 });
               } else {
