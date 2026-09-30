@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Theme, Profile } from "../types";
-import { api } from "../api";
+import { DUMMY_PEOPLE } from "../constants";
+import { supabase } from "../../supabase";
 
 interface CommunityRolesModalProps {
   isOpen: boolean;
@@ -297,6 +298,18 @@ export const CommunityInviteModal = ({
       }
     });
 
+    // 2. Supplement with app contacts from DUMMY_PEOPLE
+    DUMMY_PEOPLE.forEach(p => {
+      if (!list.some(item => item.name === p.name || item.id === p.id)) {
+        list.push({
+          id: p.id,
+          name: p.name,
+          subtitle: `${p.origin || "Expat"} · In your city`,
+          avatar: p.avatar
+        });
+      }
+    });
+
     return list;
   })();
 
@@ -353,11 +366,25 @@ export const CommunityInviteModal = ({
     }
     setIsSearching(true);
     try {
-      const { users } = await api.users.search(query.trim());
-      setSearchResults(users.map(u => ({ id: u.id, full_name: u.fullName, origin: u.origin })));
-    } catch (e) {
-      console.error("Failed to search users", e);
-      setSearchResults([]);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, origin, city")
+        .ilike("full_name", `%${query.trim()}%`)
+        .limit(8);
+
+      if (!error && data && data.length > 0) {
+        setSearchResults(data);
+      } else {
+        // Fallback filter dummy people
+        const matching = DUMMY_PEOPLE.filter(p => 
+          p.name.toLowerCase().includes(query.toLowerCase()) || 
+          p.origin.toLowerCase().includes(query.toLowerCase())
+        );
+        setSearchResults(matching.map(p => ({ id: p.id, full_name: p.name, origin: p.origin })));
+      }
+    } catch {
+      const matching = DUMMY_PEOPLE.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
+      setSearchResults(matching.map(p => ({ id: p.id, full_name: p.name, origin: p.origin })));
     }
     setIsSearching(false);
   };
@@ -365,11 +392,15 @@ export const CommunityInviteModal = ({
   const handleSendAppInvite = async (targetUserId: string, targetUserName: string) => {
     setInvitedUserIds(prev => [...prev, targetUserId]);
     try {
-      await api.groups.invite(group.id, targetUserId);
-      showToast(`Invitation sent to ${targetUserName}!`);
-    } catch (e: any) {
-      showToast(e.message || `Could not invite ${targetUserName}.`);
-    }
+      await supabase.from("community_invites").insert({
+        group_id: group.id,
+        sender_id: user?.id || "anonymous",
+        sender_name: profile?.name || "Member",
+        recipient_id: targetUserId,
+        status: "pending"
+      });
+    } catch {}
+    showToast(`Invitation sent to ${targetUserName}!`);
   };
 
   return (

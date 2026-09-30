@@ -12,8 +12,15 @@ import { LikeButton } from "./LikeButton";
 import { CommentSection } from "./CommentSection";
 import { CommunityRolesModal, CommunityInviteModal } from "./CommunityModals";
 import { Theme, Profile } from "../types";
-import { api } from "../api";
-import { wsClient } from "../ws";
+import { 
+  GENERATE_DUMMY_COMMUNITIES, 
+  GENERATE_DUMMY_EVENTS, 
+  GENERATE_DUMMY_PEOPLE, 
+  DUMMY_COMMUNITIES, 
+  DUMMY_EVENTS, 
+  DUMMY_PEOPLE 
+} from "../constants";
+import { supabase } from "../../supabase";
 
 interface CommunityTabProps {
   communitiesData: any[];
@@ -105,7 +112,7 @@ export const UserView = ({ user, onClose, T, onGroupClick, groups, onStartChat }
 
       <div className="px-4 py-8 flex flex-col items-center border-b border-orange-100 dark:border-zinc-800">
         <div className="w-24 h-24 mb-4">
-          <Avatar name={user.name} />
+          <Avatar name={user.name} url={user.avatar_url} size={24} />
         </div>
         <h1 className={`text-2xl font-bold ${T.text}`}>{user.name}</h1>
         <p className={`text-sm ${T.sub} mt-1 flex items-center gap-1.5`}>
@@ -145,6 +152,19 @@ export const UserView = ({ user, onClose, T, onGroupClick, groups, onStartChat }
             {user.bio || "Passionate about exploring new places, learning languages, and building a supportive international community. Always happy to chat over a coffee!"}
           </p>
         </div>
+
+        {user.languages && user.languages.length > 0 && (
+          <div>
+            <p className={`text-xs font-bold uppercase tracking-wider ${T.sub} mb-3`}>Languages Spoken</p>
+            <div className="flex flex-wrap gap-2">
+              {user.languages.map((lang: string) => (
+                <span key={lang} className="bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 px-3 py-1.5 rounded-full text-xs font-bold">
+                  {lang}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div>
           <p className={`text-xs font-bold uppercase tracking-wider ${T.sub} mb-3`}>Interests & Topics</p>
@@ -195,22 +215,30 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
   const handleRSVP = async () => {
     if (!user || isRsvping) return;
     setIsRsvping(true);
-    try {
-      if (joined) {
-        await api.events.cancelRsvp(selectedEvent.id);
+    if (joined) {
+      const { error } = await supabase.from("event_attendees").delete().eq("event_id", selectedEvent.id).eq("user_id", user.id);
+      if (!error) {
         setJoined(false);
-        setAttendees((a: number) => Math.max(0, a - 1));
+        const newAttendees = Math.max(0, attendees - 1);
+        setAttendees(newAttendees);
+        await supabase.from("events").update({ attendees: newAttendees }).eq("id", selectedEvent.id);
         onRSVP && onRSVP(selectedEvent.id, false);
         showToast("RSVP cancelled");
-      } else {
-        await api.events.rsvp(selectedEvent.id);
+      }
+    } else {
+      const { error } = await supabase.from("event_attendees").insert({ 
+        event_id: selectedEvent.id, 
+        user_id: user.id, 
+        user_name: user.user_metadata?.full_name || "User" 
+      });
+      if (!error) {
         setJoined(true);
-        setAttendees((a: number) => a + 1);
+        const newAttendees = attendees + 1;
+        setAttendees(newAttendees);
+        await supabase.from("events").update({ attendees: newAttendees }).eq("id", selectedEvent.id);
         onRSVP && onRSVP(selectedEvent.id, true);
         showToast("RSVP confirmed! See you there 🎉");
       }
-    } catch (e) {
-      console.error("Failed to RSVP", e);
     }
     setIsRsvping(false);
   };
@@ -229,7 +257,14 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
     showToast("Opening calendar...");
   };
 
-  const fullAttendeesList = selectedEvent.attendeesList || [];
+  const fullAttendeesList = selectedEvent.attendeesList && selectedEvent.attendeesList.length > 0 
+    ? selectedEvent.attendeesList 
+    : [
+        { user_id: "u1", user_name: "Alex Rivera", origin: "Spain" },
+        { user_id: "u2", user_name: "Maya Chen", origin: "Taiwan" },
+        { user_id: "u3", user_name: "Lukas Schmidt", origin: "Germany" },
+        { user_id: "u4", user_name: "Sarah Miller", origin: "USA" }
+      ];
 
   const filteredAttendees = fullAttendeesList.filter((a: any) => 
     (a.user_name || "").toLowerCase().includes(attendeeSearch.toLowerCase())
@@ -519,43 +554,69 @@ export const GroupView = ({
   useEffect(() => {
     fetchUpdates();
     fetchMembers();
-    return wsClient.subscribe('group:update', (payload: any) => {
-      if (payload?.groupId === group.id) fetchUpdates();
-    });
+    const channel = supabase.channel(`realtime_group_posts_${group.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+        fetchUpdates();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${group.id}` }, () => {
+        fetchMembers();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [group.id]);
 
   const fetchMembers = async () => {
-    try {
-      const { group: fullGroup } = await api.groups.get(group.id);
-      const members = fullGroup.members || [];
-      setActualMembers(members.map((m: any) => ({
-        id: m.id,
-        name: m.fullName || "Community Member",
-        role: m.role === "admin" ? "Admin" : (m.id === creatorId ? "Creator" : "Member")
+    const { data, error } = await supabase.from("group_members").select("user_id, user_name").eq("group_id", group.id);
+    if (!error && data && data.length > 0) {
+      setActualMembers(data.map((m: any) => ({
+        id: m.user_id,
+        name: m.user_name || "Community Member"
       })));
-      setMembersCount(members.length);
-    } catch (e) {
-      console.error("Failed to load members", e);
-      setActualMembers([]);
+      setMembersCount(data.length);
+    } else {
+      // Fallback default members with role clarity
+      setActualMembers([
+        { id: creatorId, name: creatorName, role: "Creator" },
+        { id: "p2", name: "Ahmed Khan", role: "Admin" },
+        { id: "p3", name: "Elena Rossi", role: "Member" },
+        { id: profile?.name || "m2", name: profile?.name || "You", role: "Member" },
+        { id: "m3", name: "Sophie Taylor", role: "Member" }
+      ]);
     }
   };
 
   const fetchUpdates = async () => {
-    try {
-      const { updates } = await api.groups.updates(group.id);
-      setPosts((updates || []).map((u: any) => ({
+    const { data: updates, error } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("location", `group:${group.id}`)
+      .order("created_at", { ascending: false });
+    
+    if (!error && updates && updates.length > 0) {
+      setPosts(updates.map(u => ({
         id: u.id,
-        author_id: u.author?.id,
-        user: { name: u.author?.fullName || "Member" },
+        author_id: u.author_id,
+        user: { name: u.author_name || "Member" },
         text: u.content,
-        time: new Date(u.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        likes: 0,
-        liked: false,
-        comments: 0
+        time: new Date(u.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        likes: Array.isArray(u.likes) ? u.likes.length : 0,
+        liked: Array.isArray(u.likes) && u.likes.includes(user?.id),
+        comments: u.comments_count || 0
       })));
-    } catch (e) {
-      console.error("Failed to load group updates", e);
-      setPosts([]);
+    } else {
+      // Default welcome post
+      setPosts([
+        {
+          id: `welcome_${group.id}`,
+          author_id: creatorId,
+          user: { name: creatorName },
+          text: `Welcome everyone to ${group.name}! 🎉 Feel free to introduce yourself, share tips, or suggest a weekend meetup.`,
+          time: "Pinned",
+          likes: 5,
+          liked: false,
+          comments: 1
+        }
+      ]);
     }
   };
 
@@ -626,29 +687,25 @@ export const GroupView = ({
     setMembersCount(nextCount);
     onToggleJoinGroup && onToggleJoinGroup(group.id, nextJoined);
 
-    try {
-      if (nextJoined) {
-        await api.groups.join(group.id);
-        fetchMembers();
-        showToast(`Joined ${group.name}!`);
-      } else {
-        await api.groups.leave(group.id);
-        fetchMembers();
-        showToast(`Left ${group.name}`);
-      }
-    } catch (e) {
-      console.error("Failed to update membership", e);
+    if (nextJoined) {
+      await supabase.from("group_members").insert({
+        group_id: group.id,
+        user_id: user.id,
+        user_name: profile?.name || user.user_metadata?.full_name || "User"
+      });
+      fetchMembers();
+      showToast(`Joined ${group.name}!`);
+    } else {
+      await supabase.from("group_members").delete().eq("group_id", group.id).eq("user_id", user.id);
+      fetchMembers();
+      showToast(`Left ${group.name}`);
     }
   };
 
   const handleLeaveGroup = async () => {
     if (confirm(`Are you sure you want to leave ${group.name}?`)) {
       if (user) {
-        try {
-          await api.groups.leave(group.id);
-        } catch (e) {
-          console.error("Failed to leave group", e);
-        }
+        await supabase.from("group_members").delete().eq("group_id", group.id).eq("user_id", user.id);
       }
       setIsJoined(false);
       setMembersCount(Math.max(0, membersCount - 1));
@@ -670,15 +727,32 @@ export const GroupView = ({
     const textToSubmit = newUpdateText;
     setNewUpdateText("");
 
-    try {
-      await api.groups.postUpdate(group.id, textToSubmit);
+    const { error } = await supabase.from("posts").insert({
+      content: textToSubmit,
+      author_id: user.id,
+      author_name: profile?.name || user?.user_metadata?.full_name || "Member",
+      location: `group:${group.id}`,
+      privacy: "Public",
+      likes: []
+    });
+
+    if (!error) {
       fetchUpdates();
       showToast("Post shared with the group!");
-    } catch (e) {
+    } else {
       setNewUpdateText(textToSubmit);
       showToast("Could not publish post. Please try again.");
     }
     setIsPosting(false);
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (confirm("Delete this post from the group?")) {
+      setPosts(prev => prev.filter(p => p.id !== postId));
+      setActivePostMenu(null);
+      await supabase.from("posts").delete().eq("id", postId);
+      showToast("Post removed");
+    }
   };
 
   const handleCopyPostLink = (text: string) => {
@@ -1047,6 +1121,7 @@ export const GroupView = ({
               </div>
             ) : (
               sortedPosts.map((p) => {
+                const isAuthor = user && (p.author_id === user.id || p.user?.name === profile?.name);
                 const canModerate = isCurrentUserAdmin || isCurrentUserCreator;
                 const isPostCreator = p.author_id === creatorId || (p.user?.name && p.user.name.toLowerCase() === creatorName.toLowerCase());
                 const isPostAdmin = !isPostCreator && (adminIds.includes(p.author_id) || (p.user?.name && (adminIds.includes(p.user.name) || adminIds.includes(p.user.name.toLowerCase()))));
@@ -1117,6 +1192,14 @@ export const GroupView = ({
                                 className={`text-left px-2.5 py-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-2`}
                               >
                                 <Pin size={13} /> {isPinned ? "Unpin Post" : "Pin Announcement"}
+                              </button>
+                            )}
+                            {(isAuthor || canModerate) && (
+                              <button 
+                                onClick={() => handleDeletePost(p.id)}
+                                className="text-left px-2.5 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl flex items-center gap-2"
+                              >
+                                <Trash2 size={13} /> Delete Post
                               </button>
                             )}
                           </div>
@@ -1445,8 +1528,8 @@ export const CommunityTab = ({
   directMessages
 }: CommunityTabProps) => {
   const [data, setData] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [people, setPeople] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>(DUMMY_EVENTS);
+  const [people, setPeople] = useState<any[]>(DUMMY_PEOPLE);
   const [invites, setInvites] = useState<any[]>([]);
   
   // Search & Filtering States
@@ -1462,10 +1545,14 @@ export const CommunityTab = ({
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [groupToInvite, setGroupToInvite] = useState<any>(null);
+  const [inviteSearch, setInviteSearch] = useState("");
+  const [inviteResults, setInviteResults] = useState<any[]>([]);
+  const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
 
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
   const [showAllYourGroupsModal, setShowAllYourGroupsModal] = useState(false);
+  const [showRadarModal, setShowRadarModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Group Creation States
@@ -1498,87 +1585,147 @@ export const CommunityTab = ({
     fetchInvites();
   }, [user]);
 
+  useEffect(() => {
+    if (inviteSearch.trim().length > 1) {
+      const timer = setTimeout(() => {
+        searchUsers();
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      setInviteResults([]);
+    }
+  }, [inviteSearch]);
+
+  const searchUsers = async () => {
+    const { data: users, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, origin")
+      .ilike("full_name", `%${inviteSearch}%`)
+      .neq("id", user?.id)
+      .limit(5);
+    
+    if (!error && users) {
+      setInviteResults(users);
+    }
+  };
+
+  const sendInvite = async (inviteeId: string) => {
+    if (!user || !groupToInvite) return;
+    setInvitingUserId(inviteeId);
+    
+    const { error } = await supabase.from("group_invites").insert({
+      group_id: groupToInvite.id,
+      inviter_id: user.id,
+      invitee_id: inviteeId
+    });
+
+    if (!error) {
+      await supabase.from("notifications").insert({
+        user_id: inviteeId,
+        type: "group_invite",
+        content: `${profile.name} invited you to join ${groupToInvite.name}`
+      });
+      showToast(`Invitation sent for ${groupToInvite.name}!`);
+      setIsInviteModalOpen(false);
+      setInviteSearch("");
+    } else if (error.code === "23505") {
+      showToast("This user is already invited or a member.");
+    } else {
+      showToast(error.message);
+    }
+    setInvitingUserId(null);
+  };
+
   const fetchInvites = async () => {
     if (!user) return;
-    try {
-      const { invites: invs } = await api.groups.receivedInvites();
+    const { data: invs, error } = await supabase
+      .from("group_invites")
+      .select("*, groups(name, image, description), profiles!inviter_id(full_name)")
+      .eq("invitee_id", user.id)
+      .eq("status", "pending");
+    
+    if (!error && invs) {
       setInvites(invs);
-    } catch (e) {
-      console.error("Failed to load invites", e);
     }
   };
 
   const handleInviteAction = async (invite: any, action: "accepted" | "declined") => {
-    try {
-      await api.groups.respondInvite(invite.id, action === "accepted" ? "ACCEPTED" : "DECLINED");
-      if (action === "accepted") {
-        showToast(`Joined ${invite.group?.name}!`);
-        fetchCommunities();
-        onRefreshGroups && onRefreshGroups();
-      }
-    } catch (e) {
-      console.error("Failed to respond to invite", e);
+    const { error: updateError } = await supabase
+      .from("group_invites")
+      .update({ status: action })
+      .eq("id", invite.id);
+
+    if (!updateError && action === "accepted") {
+      await supabase.from("group_members").insert({
+        group_id: invite.group_id,
+        user_id: user.id,
+        user_name: profile.name
+      });
+      showToast(`Joined ${invite.groups?.name}!`);
+      fetchCommunities();
+      onRefreshGroups && onRefreshGroups();
     }
     fetchInvites();
   };
 
   const fetchCommunities = async () => {
-    try {
-      const { groups } = await api.groups.list();
-      if (groups && groups.length > 0) {
-        setData(groups.map((g: any) => ({
-          id: g.id,
-          name: g.name,
-          desc: g.description,
-          category: g.category || "General",
-          emoji: g.emoji || "🏘️",
-          members: g.membersCount || 0,
-          joined: !!g.joined
-        })));
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to load communities", e);
+    const { data: groups, error } = await supabase.from("groups").select("*, group_members(user_id)");
+    if (!error && groups && groups.length > 0) {
+      const dbGroups = groups.map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        desc: g.description,
+        category: g.category || "General",
+        emoji: g.image || (g.category === "Social" ? "🌍" : g.category === "Housing" ? "🏠" : g.category === "Professional" ? "💼" : "🏘️"),
+        members: g.group_members?.length || 0,
+        joined: g.group_members?.some((m: any) => m.user_id === user?.id)
+      }));
+      setData(dbGroups);
+    } else {
+      const o = profile?.origin || "USA";
+      const c = profile?.city || "Berlin";
+      const h = profile?.host || "Germany";
+      setData(GENERATE_DUMMY_COMMUNITIES(o, c, h));
     }
-    setData([]);
   };
 
   const fetchEvents = async () => {
-    try {
-      const { events: evs } = await api.events.list();
-      if (evs && evs.length > 0) {
-        setEvents(evs.map((e: any) => ({
-          ...e,
-          attendees: e.attendeesCount,
-          attendeesList: [],
-          joined: !!e.attending
-        })));
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to load events", e);
+    const { data: evs, error } = await supabase.from("events").select("*, event_attendees(user_id, user_name)");
+    if (!error && evs && evs.length > 0) {
+      const dbEvents = evs.map((e: any) => ({
+        ...e,
+        attendeesList: e.event_attendees || [],
+        joined: e.event_attendees?.some((m: any) => m.user_id === user?.id)
+      }));
+      setEvents(dbEvents);
+    } else {
+      const o = profile?.origin || "USA";
+      const c = profile?.city || "Berlin";
+      const h = profile?.host || "Germany";
+      setEvents(GENERATE_DUMMY_EVENTS(o, c, h));
     }
-    setEvents([]);
   };
 
   const fetchPeople = async () => {
-    try {
-      const { users: pros } = await api.users.search("");
-      if (pros && pros.length > 0) {
-        setPeople(pros.map((p: any) => ({
-          id: p.id,
-          name: p.fullName || p.handle || "Newcomer",
-          origin: p.origin || "International",
-          city: profile.city || "Berlin",
-          bio: p.bio || "Enthusiastic expat exploring Germany.",
-          avatar: (p.fullName || p.handle || "U").substring(0, 2).toUpperCase()
-        })));
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to load people", e);
+    const { data: pros, error } = await supabase.from("profiles").select("*").neq("id", user?.id).limit(15);
+    if (!error && pros && pros.length > 0) {
+      const dbPeople = pros.map((p: any) => ({
+        id: p.id,
+        name: p.full_name || p.handle || "Newcomer",
+        origin: p.origin || "International",
+        city: p.city || profile.city || "Berlin",
+        bio: p.bio || "Enthusiastic expat exploring Germany.",
+        avatar: (p.full_name || p.handle || "U").substring(0, 2).toUpperCase(),
+        avatar_url: p.avatar_url,
+        languages: p.languages || []
+      }));
+      setPeople(dbPeople);
+    } else {
+      const o = profile?.origin || "USA";
+      const c = profile?.city || "Berlin";
+      const h = profile?.host || "Germany";
+      setPeople(GENERATE_DUMMY_PEOPLE(o, c, h));
     }
-    setPeople([]);
   };
 
   const handleJoinGroup = async (groupId: string) => {
@@ -1589,12 +1736,14 @@ export const CommunityTab = ({
     // Optimistic UI update
     setData(prev => prev.map(g => g.id === groupId ? { ...g, joined: true, members: g.members + 1 } : g));
     showToast("Joined group!");
-
-    try {
-      await api.groups.join(groupId);
+    
+    const { error } = await supabase.from("group_members").insert({
+      group_id: groupId,
+      user_id: user.id,
+      user_name: profile.name
+    });
+    if (!error) {
       onRefreshGroups && onRefreshGroups();
-    } catch (e) {
-      console.error("Failed to join group", e);
     }
   };
 
@@ -1611,27 +1760,37 @@ export const CommunityTab = ({
     }
     setIsCreating(true);
     setCreateError("");
+    
+    const { data: newGroup, error } = await supabase.from("groups").insert({
+      name: newGroupName.trim(),
+      description: newGroupDesc.trim(),
+      category: newGroupCat,
+      image: newGroupEmoji,
+      admin_id: user.id,
+      admin_name: profile.name || user.user_metadata?.full_name || "User"
+    }).select().single();
 
-    try {
-      const { group: newGroup } = await api.groups.create({
-        name: newGroupName.trim(),
-        description: newGroupDesc.trim(),
-        category: newGroupCat,
-        emoji: newGroupEmoji
+    if (error) {
+      setCreateError(error.message);
+    } else if (newGroup) {
+      await supabase.from("group_members").insert({
+        group_id: newGroup.id,
+        user_id: user.id,
+        user_name: profile.name || user.user_metadata?.full_name || "User"
       });
-
+      
       // Update local state instantly
       const createdObj = {
         id: newGroup.id,
         name: newGroup.name,
         desc: newGroup.description,
         category: newGroup.category,
-        emoji: newGroup.emoji || newGroupEmoji,
+        emoji: newGroup.image || newGroupEmoji,
         members: 1,
         joined: true
       };
       setData(prev => [createdObj, ...prev]);
-
+      
       setIsCreateGroupOpen(false);
       setNewGroupName("");
       setNewGroupDesc("");
@@ -1639,8 +1798,6 @@ export const CommunityTab = ({
       setNewGroupEmoji("🏘️");
       showToast(`Group "${newGroup.name}" created!`);
       onRefreshGroups && onRefreshGroups();
-    } catch (e: any) {
-      setCreateError(e.message || "Failed to create group");
     }
     setIsCreating(false);
   };
@@ -1654,36 +1811,46 @@ export const CommunityTab = ({
     setIsCreating(true);
     setCreateError("");
 
-    // Compute an actual Date for the API, and a readable label for display
-    let isoDate = new Date().toISOString();
-    let formattedDate = "This Weekend · 18:00";
+    // Format readable date
+    let formattedDate = newEventDateInput;
     if (newEventDateInput) {
-      const d = new Date(`${newEventDateInput}T${newEventTimeInput || '18:00'}`);
-      if (!isNaN(d.getTime())) {
-        isoDate = d.toISOString();
+      try {
+        const d = new Date(`${newEventDateInput}T${newEventTimeInput || '18:00'}`);
         formattedDate = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ` · ${newEventTimeInput || '18:00'}`;
+      } catch {
+        formattedDate = `${newEventDateInput} · ${newEventTimeInput}`;
       }
+    } else {
+      formattedDate = "This Weekend · 18:00";
     }
+    
+    const { data: newEvent, error } = await supabase.from("events").insert({
+      title: newEventName.trim(),
+      description: newEventDesc.trim(),
+      image: newEventEmoji,
+      date: formattedDate,
+      location: newEventLocation.trim(),
+      creator_id: user.id
+    }).select().single();
 
-    try {
-      const { event: newEvent } = await api.events.create({
-        title: newEventName.trim(),
-        description: newEventDesc.trim(),
-        image: newEventEmoji,
-        date: isoDate,
-        location: newEventLocation.trim()
+    if (error) {
+      setCreateError(error.message);
+    } else if (newEvent) {
+      await supabase.from("event_attendees").insert({
+        event_id: newEvent.id,
+        user_id: user.id,
+        user_name: profile.name || user.user_metadata?.full_name || "User"
       });
-      await api.events.rsvp(newEvent.id);
-
+      await supabase.from("events").update({ attendees: 1 }).eq("id", newEvent.id);
+      
       const createdEventObj = {
         ...newEvent,
-        date: formattedDate,
         joined: true,
         attendees: 1,
         attendeesList: [{ user_id: user.id, user_name: profile.name }]
       };
       setEvents(prev => [createdEventObj, ...prev]);
-
+      
       setIsCreateEventOpen(false);
       setNewEventName("");
       setNewEventDesc("");
@@ -1691,8 +1858,6 @@ export const CommunityTab = ({
       setNewEventDateInput("");
       setNewEventEmoji("📅");
       showToast(`Event "${newEvent.title}" published!`);
-    } catch (e: any) {
-      setCreateError(e.message || "Failed to create event");
     }
     setIsCreating(false);
   };
@@ -1793,6 +1958,7 @@ export const CommunityTab = ({
       {/* Main Header */}
       <Header 
         T={T} 
+        hideOnDesktop={true}
         title="Community" 
         right={
           <div className="flex gap-1.5">
@@ -1870,7 +2036,7 @@ export const CommunityTab = ({
 
       {/* GROUPS TAB */}
       {activeCommunityTab === "groups" && (
-        <div className="mx-4 space-y-3.5 cardin">
+        <div className="mx-4 lg:mx-0 space-y-3.5 cardin">
           {/* Category Filter Chips */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {["All", "Social", "Housing", "Professional", "Hobby", "Support"].map(cat => (
@@ -1897,11 +2063,11 @@ export const CommunityTab = ({
                   <div key={inv.id} className={`${T.card} rounded-2xl p-3.5 shadow-sm border-2 border-orange-200 dark:border-orange-500/30`}>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-500/10 flex items-center justify-center text-xl shrink-0">
-                        {inv.group?.emoji || "🏘️"}
+                        {inv.groups?.image || "🏘️"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-bold ${T.text} truncate`}>{inv.group?.name}</p>
-                        <p className={`text-[11px] ${T.sub}`}>Invited by {inv.inviter?.fullName || "Community member"}</p>
+                        <p className={`text-xs font-bold ${T.text} truncate`}>{inv.groups?.name}</p>
+                        <p className={`text-[11px] ${T.sub}`}>Invited by {inv.profiles?.full_name || "Community member"}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3">
@@ -1969,28 +2135,30 @@ export const CommunityTab = ({
             {filteredGroups.filter(c => !c.joined).length === 0 ? (
               <p className={`text-xs text-center py-6 ${T.sub}`}>No matching groups found.</p>
             ) : (
-              filteredGroups.filter(c => !c.joined).map(c => (
-                <div 
-                  key={c.id || c.name} 
-                  onClick={() => setSelectedGroup(c)} 
-                  className={`${T.card} rounded-2xl p-3.5 mb-2 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
-                >
-                  <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-2xl shrink-0">{c.emoji}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-bold ${T.text} truncate`}>{c.name}</p>
-                    <p className={`text-[11px] ${T.sub} truncate`}>{c.desc || `${c.members} members · ${c.category || "Community"}`}</p>
-                  </div>
-                  <button 
-                    className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shrink-0 shadow-sm active:scale-95 transition-all" 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      handleJoinGroup(c.id); 
-                    }}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filteredGroups.filter(c => !c.joined).map(c => (
+                  <div 
+                    key={c.id || c.name} 
+                    onClick={() => setSelectedGroup(c)} 
+                    className={`${T.card} rounded-2xl p-3.5 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
                   >
-                    Join
-                  </button>
-                </div>
-              ))
+                    <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-2xl shrink-0">{c.emoji}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-bold ${T.text} truncate`}>{c.name}</p>
+                      <p className={`text-[11px] ${T.sub} truncate`}>{c.desc || `${c.members} members · ${c.category || "Community"}`}</p>
+                    </div>
+                    <button 
+                      className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shrink-0 shadow-sm active:scale-95 transition-all" 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        handleJoinGroup(c.id); 
+                      }}
+                    >
+                      Join
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -1998,7 +2166,7 @@ export const CommunityTab = ({
 
       {/* EVENTS TAB */}
       {activeCommunityTab === "events" && (
-        <div className="mx-4 space-y-3.5 cardin">
+        <div className="mx-4 lg:mx-0 space-y-3.5 cardin">
           {/* Events Filter Chips */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {["All", "Upcoming", "Attending", "This Week"].map(filter => (
@@ -2025,48 +2193,67 @@ export const CommunityTab = ({
               <p className={`text-xs ${T.sub} mt-1`}>Create an event and bring people together!</p>
             </div>
           ) : (
-            filteredEvents.map(e => (
-              <div 
-                key={e.id} 
-                onClick={() => setSelectedEvent(e)} 
-                className={`${T.card} rounded-2xl overflow-hidden shadow-sm flex cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
-              >
-                <div className="w-24 bg-orange-100 dark:bg-zinc-900 flex items-center justify-center text-4xl shrink-0">
-                  {e.image || "📅"}
-                </div>
-                <div className="p-3.5 flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-orange-600 mb-0.5">{e.date}</p>
-                    {e.joined && (
-                      <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full">
-                        Going
-                      </span>
-                    )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredEvents.map(e => (
+                <div 
+                  key={e.id} 
+                  onClick={() => setSelectedEvent(e)} 
+                  className={`${T.card} rounded-2xl overflow-hidden shadow-sm flex cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
+                >
+                  <div className="w-24 bg-orange-100 dark:bg-zinc-900 flex items-center justify-center text-4xl shrink-0">
+                    {e.image || "📅"}
                   </div>
-                  <p className={`text-xs font-bold ${T.text} truncate`}>{e.title}</p>
-                  <p className={`text-[11px] ${T.sub} flex items-center gap-1 mt-1 truncate`}>
-                    <MapPin size={11} className="shrink-0 text-orange-500" /> {e.location}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2.5">
-                    <div className="flex -space-x-1.5">
-                      {[1, 2, 3].map(i => (
-                        <div key={i} className="w-5 h-5 rounded-full border-2 border-white dark:border-zinc-900 bg-orange-400 text-[8px] text-white flex items-center justify-center font-bold">
-                          {i}
-                        </div>
-                      ))}
+                  <div className="p-3.5 flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold text-orange-600 mb-0.5">{e.date}</p>
+                      {e.joined && (
+                        <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full">
+                          Going
+                        </span>
+                      )}
                     </div>
-                    <p className={`text-[10px] ${T.sub}`}>+{e.attendees || 0} attending</p>
+                    <p className={`text-xs font-bold ${T.text} truncate`}>{e.title}</p>
+                    <p className={`text-[11px] ${T.sub} flex items-center gap-1 mt-1 truncate`}>
+                      <MapPin size={11} className="shrink-0 text-orange-500" /> {e.location}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <div className="flex -space-x-1.5">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="w-5 h-5 rounded-full border-2 border-white dark:border-zinc-900 bg-orange-400 text-[8px] text-white flex items-center justify-center font-bold">
+                            {i}
+                          </div>
+                        ))}
+                      </div>
+                      <p className={`text-[10px] ${T.sub}`}>+{e.attendees || 0} attending</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}
 
       {/* PEOPLE TAB */}
       {activeCommunityTab === "people" && (
-        <div className="mx-4 space-y-3.5 cardin">
+        <div className="mx-4 lg:mx-0 space-y-3.5 cardin">
+          {/* Expats Nearby Radar Card */}
+          <div className={`p-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md flex items-center gap-3.5`}>
+            <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0">
+              <Compass size={22} className="animate-spin-slow" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white leading-tight">Expats in {profile.city}</p>
+              <p className="text-xs text-orange-100 mt-0.5 truncate">Discover newcomers & neighbors nearby</p>
+            </div>
+            <button 
+              onClick={() => setShowRadarModal(true)}
+              className="bg-white text-orange-600 hover:bg-orange-50 text-xs font-bold px-3.5 py-1.5 rounded-full shadow-sm active:scale-95 transition-all shrink-0"
+            >
+              Radar
+            </button>
+          </div>
+
           {/* People Filter Chips */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {["All", `In ${profile.city}`, `From ${profile.origin}`].map(filter => (
@@ -2089,31 +2276,33 @@ export const CommunityTab = ({
           {filteredPeople.length === 0 ? (
             <p className={`text-xs text-center py-6 ${T.sub}`}>No matching members found.</p>
           ) : (
-            filteredPeople.map(p => (
-              <div 
-                key={p.id} 
-                onClick={() => setSelectedUser(p)} 
-                className={`${T.card} rounded-2xl p-3.5 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
-              >
-                <Avatar name={p.name} size={10} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-bold ${T.text} truncate`}>
-                    {p.name} <span className="text-[11px] font-normal text-orange-600 dark:text-orange-400">from {p.origin}</span>
-                  </p>
-                  <p className={`text-[11px] ${T.sub} line-clamp-1 mt-0.5`}>{p.bio}</p>
-                </div>
-                <button 
-                  className={`p-2 rounded-full ${T.card2} text-orange-500 hover:bg-orange-500 hover:text-white transition-colors shrink-0`} 
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    onStartChat ? onStartChat(p.id, p.name) : setSelectedUser(p); 
-                  }}
-                  title="Direct message"
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredPeople.map(p => (
+                <div 
+                  key={p.id} 
+                  onClick={() => setSelectedUser(p)} 
+                  className={`${T.card} rounded-2xl p-3.5 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
                 >
-                  <MessageCircle size={16} />
-                </button>
-              </div>
-            ))
+                  <Avatar name={p.name} url={p.avatar_url} size={10} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${T.text} truncate`}>
+                      {p.name} <span className="text-[11px] font-normal text-orange-600 dark:text-orange-400">from {p.origin}</span>
+                    </p>
+                    <p className={`text-[11px] ${T.sub} line-clamp-1 mt-0.5`}>{p.bio}</p>
+                  </div>
+                  <button 
+                    className={`p-2 rounded-full ${T.card2} text-orange-500 hover:bg-orange-500 hover:text-white transition-colors shrink-0`} 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onStartChat ? onStartChat(p.id, p.name) : setSelectedUser(p); 
+                    }}
+                    title="Direct message"
+                  >
+                    <MessageCircle size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -2142,6 +2331,60 @@ export const CommunityTab = ({
                     <p className={`text-[10px] ${T.sub}`}>{c.members} members</p>
                   </div>
                   <ChevronRight size={15} className={T.sub} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Neighborhood Radar */}
+      {showRadarModal && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-sm ${T.bg} rounded-3xl overflow-hidden cardin flex flex-col max-h-[85vh]`}>
+            <div className="p-4 border-b border-orange-100 dark:border-zinc-800 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Compass size={18} className="text-orange-500" />
+                <h3 className={`text-base font-bold ${T.text}`}>{profile.city} Community Radar</h3>
+              </div>
+              <button onClick={() => setShowRadarModal(false)} className={T.sub}><X size={20} /></button>
+            </div>
+            <div className="p-4 bg-orange-500/10 dark:bg-zinc-900 flex items-center justify-center py-6 border-b border-orange-100 dark:border-zinc-800">
+              <div className="relative w-28 h-28 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border border-orange-500/20 animate-ping" />
+                <div className="absolute inset-3 rounded-full border border-orange-500/40" />
+                <div className="absolute inset-7 rounded-full border border-orange-500/60" />
+                <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs shadow-md">
+                  You
+                </div>
+              </div>
+            </div>
+            <div className="p-4 space-y-2.5 overflow-y-auto flex-1 no-scrollbar">
+              <p className={`text-[11px] font-bold uppercase tracking-wider ${T.sub} mb-1`}>Active nearby</p>
+              {[
+                { name: "Carlos Ramos", dist: "0.8 km away", area: "Mitte", origin: "Spain" },
+                { name: "Ananya Sharma", dist: "1.4 km away", area: "Prenzlauer Berg", origin: "India" },
+                { name: "Liam Vance", dist: "2.1 km away", area: "Kreuzberg", origin: "UK" },
+                { name: "Elena Rossi", dist: "2.9 km away", area: "Friedrichshain", origin: "Italy" }
+              ].map((p, i) => (
+                <div 
+                  key={i} 
+                  className={`flex items-center gap-3 p-3 rounded-2xl ${T.card2} hover:border-orange-500 transition-all`}
+                >
+                  <Avatar name={p.name} size={9} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${T.text} truncate`}>{p.name}</p>
+                    <p className={`text-[10px] text-orange-600 font-semibold`}>{p.dist} · {p.area}</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setShowRadarModal(false);
+                      onStartChat ? onStartChat(p.name.toLowerCase().replace(/\s+/g, '-'), p.name) : showToast(`Connecting with ${p.name}...`);
+                    }}
+                    className="bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-sm shrink-0"
+                  >
+                    Say Hi
+                  </button>
                 </div>
               ))}
             </div>

@@ -1,3 +1,113 @@
+-- SQL schema and RLS policies for Posts, Likes, Shares, and Saves
+
+-- 1. Create Tables
+
+-- POSTS table
+CREATE TABLE posts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users NOT NULL,
+  text text NOT NULL,
+  attachment text,
+  feeling text,
+  location text,
+  privacy text DEFAULT 'Public',
+  bg_theme text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- POST_TAGS table (for tagged friends/users)
+CREATE TABLE post_tags (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid REFERENCES posts ON DELETE CASCADE NOT NULL,
+  tagged_user_id uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- LIKES/REACTIONS table
+CREATE TABLE post_reactions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid REFERENCES posts ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  emoji text NOT NULL DEFAULT '👍',
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(post_id, user_id, emoji)
+);
+
+-- COMMENTS table
+CREATE TABLE post_comments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid REFERENCES posts ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  text text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- SHARES table
+CREATE TABLE post_shares (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid REFERENCES posts ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  shared_to_thread_id text, -- nullable if shared externally
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- SAVES table
+CREATE TABLE post_saves (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id uuid REFERENCES posts ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(post_id, user_id)
+);
+
+-- 2. Enable Row Level Security
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_reactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_shares ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_saves ENABLE ROW LEVEL SECURITY;
+
+-- 3. RLS Policies
+
+-- POSTS Policies
+-- Anyone can read 'Public' posts, or posts by 'Friends' (if friendship logic implemented)
+-- Here we allow viewing all public posts, and user's own posts.
+CREATE POLICY "View public posts" ON posts FOR SELECT USING (privacy = 'Public' OR user_id = auth.uid());
+CREATE POLICY "Insert own posts" ON posts FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Update own posts" ON posts FOR UPDATE USING (user_id = auth.uid());
+CREATE POLICY "Delete own posts" ON posts FOR DELETE USING (user_id = auth.uid());
+
+-- POST_TAGS Policies
+CREATE POLICY "View tags" ON post_tags FOR SELECT USING (true);
+CREATE POLICY "Insert tags for own posts" ON post_tags FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM posts WHERE id = post_id AND user_id = auth.uid())
+);
+CREATE POLICY "Delete tags for own posts" ON post_tags FOR DELETE USING (
+  EXISTS (SELECT 1 FROM posts WHERE id = post_id AND user_id = auth.uid())
+);
+
+-- REACTIONS Policies
+CREATE POLICY "View reactions" ON post_reactions FOR SELECT USING (true);
+CREATE POLICY "Insert own reaction" ON post_reactions FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Delete own reaction" ON post_reactions FOR DELETE USING (user_id = auth.uid());
+
+-- COMMENTS Policies
+CREATE POLICY "View comments" ON post_comments FOR SELECT USING (true);
+CREATE POLICY "Insert own comment" ON post_comments FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Delete own comment" ON post_comments FOR DELETE USING (user_id = auth.uid());
+CREATE POLICY "Update own comment" ON post_comments FOR UPDATE USING (user_id = auth.uid());
+
+-- SHARES Policies
+CREATE POLICY "View shares" ON post_shares FOR SELECT USING (true);
+CREATE POLICY "Insert own share" ON post_shares FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Delete own share" ON post_shares FOR DELETE USING (user_id = auth.uid());
+
+-- SAVES Policies
+CREATE POLICY "View own saves" ON post_saves FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Insert own saves" ON post_saves FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Delete own saves" ON post_saves FOR DELETE USING (user_id = auth.uid());
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
@@ -318,114 +428,3 @@ create policy "Public Access to Avatars" on storage.objects for select using ( b
 create policy "Auth users can upload avatars" on storage.objects for insert with check ( bucket_id = 'avatars' AND auth.role() = 'authenticated' );
 create policy "Users can update their own avatars" on storage.objects for update using ( bucket_id = 'avatars' AND auth.uid() = owner );
 create policy "Users can delete their own avatars" on storage.objects for delete using ( bucket_id = 'avatars' AND auth.uid() = owner );
-
--- Curated local service listings; only verified records are public.
-create table if not exists public.local_service_providers (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  category text not null check (category in ('plumber', 'electrician', 'locksmith', 'handyman', 'movers', 'cleaning', 'appliance', 'doctor', 'translator', 'legal_advisor', 'tax_advisor')),
-  category_label text not null,
-  city text not null,
-  host_country text not null,
-  phone text not null,
-  email text not null,
-  languages text[] not null default '{}',
-  hourly_rate text,
-  response_time text,
-  is_verified boolean not null default false,
-  is_expat_specialist boolean not null default false,
-  description text not null default '',
-  features text[] not null default '{}',
-  rating numeric not null default 0 check (rating >= 0 and rating <= 5),
-  review_count integer not null default 0 check (review_count >= 0),
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_providers enable row level security;
-drop policy if exists "Verified local services are public" on public.local_service_providers;
-create policy "Verified local services are public"
-  on public.local_service_providers for select
-  using (is_verified = true);
-
--- Suggestions remain private to their submitter until reviewed by an operator.
-create table if not exists public.local_service_provider_submissions (
-  id uuid primary key default gen_random_uuid(),
-  submitter_id uuid not null references auth.users(id) on delete cascade,
-  business_name text not null,
-  category text not null check (category in ('plumber', 'electrician', 'locksmith', 'handyman', 'movers', 'cleaning', 'appliance', 'doctor', 'translator', 'legal_advisor', 'tax_advisor')),
-  city text not null,
-  host_country text not null,
-  phone text not null,
-  email text not null,
-  website_url text,
-  description text not null,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_provider_submissions enable row level security;
-drop policy if exists "Users can submit local service suggestions" on public.local_service_provider_submissions;
-create policy "Users can submit local service suggestions"
-  on public.local_service_provider_submissions for insert
-  with check (auth.uid() = submitter_id and status = 'pending');
-drop policy if exists "Users can view their own local service suggestions" on public.local_service_provider_submissions;
-create policy "Users can view their own local service suggestions"
-  on public.local_service_provider_submissions for select
-  using (auth.uid() = submitter_id);
-
-create table if not exists public.local_service_provider_reviews (
-  id uuid primary key default gen_random_uuid(),
-  provider_id uuid not null references public.local_service_providers(id) on delete cascade,
-  reviewer_id uuid not null references auth.users(id) on delete cascade,
-  reviewer_name text not null,
-  rating integer not null check (rating between 1 and 5),
-  review_text text not null check (char_length(review_text) between 1 and 2000),
-  city text not null,
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_provider_reviews enable row level security;
-drop policy if exists "Reviews for verified providers are public" on public.local_service_provider_reviews;
-create policy "Reviews for verified providers are public"
-  on public.local_service_provider_reviews for select
-  using (exists (
-    select 1 from public.local_service_providers provider
-    where provider.id = provider_id and provider.is_verified = true
-  ));
-drop policy if exists "Users can review verified providers" on public.local_service_provider_reviews;
-create policy "Users can review verified providers"
-  on public.local_service_provider_reviews for insert
-  with check (
-    auth.uid() = reviewer_id
-    and exists (
-      select 1 from public.local_service_providers provider
-      where provider.id = provider_id and provider.is_verified = true
-    )
-  );
-
-create table if not exists public.local_service_quote_requests (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  provider_id uuid not null references public.local_service_providers(id) on delete cascade,
-  description text not null check (char_length(description) between 1 and 2000),
-  urgency text not null check (urgency in ('flexible', 'today', 'emergency')),
-  contact_method text not null check (contact_method in ('whatsapp', 'email', 'phone')),
-  status text not null default 'pending' check (status in ('pending', 'contacted', 'closed')),
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_quote_requests enable row level security;
-drop policy if exists "Users can create quote requests for verified providers" on public.local_service_quote_requests;
-create policy "Users can create quote requests for verified providers"
-  on public.local_service_quote_requests for insert
-  with check (
-    auth.uid() = user_id
-    and exists (
-      select 1 from public.local_service_providers provider
-      where provider.id = provider_id and provider.is_verified = true
-    )
-  );
-drop policy if exists "Users can view their own quote requests" on public.local_service_quote_requests;
-create policy "Users can view their own quote requests"
-  on public.local_service_quote_requests for select
-  using (auth.uid() = user_id);
