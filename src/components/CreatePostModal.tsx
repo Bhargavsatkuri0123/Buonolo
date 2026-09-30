@@ -40,7 +40,7 @@ export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePos
           setDynamicLocations(Array.from(new Set(users.map((candidate) => {
             if (candidate.city && candidate.host) return `${candidate.city}, ${candidate.host}`;
             return candidate.city || candidate.host || null;
-          }).filter(Boolean)) as string[]);
+          }).filter(Boolean))) as string[]);
         } catch (error) {
           console.error("Failed to load post metadata", error);
         }
