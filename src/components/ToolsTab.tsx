@@ -3,13 +3,12 @@ import {
   Search, ChevronRight, Wrench, CheckCircle2, ChevronDown, MessageCircle, 
   ExternalLink, PlayCircle, FileText, AlertTriangle, Clock, ShieldAlert, 
   Check, X, ShieldCheck, HelpCircle, ArrowRight, DollarSign, Award, 
-  Info, Heart, List, MapPin, Building, CheckSquare, Square, Sparkles, Save, Wand2 
+  Info, Heart, List, MapPin, Building, CheckSquare, Square, Sparkles 
 } from "lucide-react";
 import { Header } from "./Header";
 import { Theme, Profile } from "../types";
-import { supabase } from "../../supabase";
+import { api, mapStepToApi } from "../api";
 import { LocalServicesHub } from "./LocalServicesHub";
-import { CostOfLivingPlanner } from "./CostOfLivingPlanner";
 
 interface ToolDetailProps {
   tool: any;
@@ -193,157 +192,127 @@ const getToolMetadata = (name: string, origin: string, city: string, host: strin
 };
 
 // 2. Interactive Document Hotspot View
-const InteractiveDocument = ({ toolName, T, user }: { toolName: string; T: Theme; user?: any }) => {
-  const formCategory = [
-    "Registration", "Banking", "Visas & Permits", "Housing & Utilities", "Health Insurance"
-  ].includes(toolName) ? toolName : "Registration";
+const DocumentMockup = ({ toolName, T }: { toolName: string; T: Theme }) => {
+  const [activeHotspot, setActiveHotspot] = useState<number | null>(null);
 
-  const draftKey = `meet-peanut_form_${user?.id || 'default'}_${formCategory}`;
-  
-  const [formData, setFormData] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem(draftKey);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {};
-  });
-
-  const [saved, setSaved] = useState(false);
-  const [autofillAnimating, setAutofillAnimating] = useState(false);
-
-  const formSchemas: Record<string, {
+  const mockups: Record<string, {
     title: string;
     sub: string;
-    fields: { id: string; label: string; desc: string; type: string; placeholder?: string }[];
+    fields: { label: string; desc: string; x: string; y: string }[];
   }> = {
     "Registration": {
       title: "Address Registration Form (Anmeldung)",
-      sub: "Fill out your details to auto-generate the registration document",
+      sub: "Interactive Sample Form",
       fields: [
-        { id: "fullName", label: "Full Name", desc: "Exactly as it appears on your passport", type: "text", placeholder: "e.g. Maria Silva" },
-        { id: "moveInDate", label: "Move-in Date", desc: "Must match your rental contract", type: "date" },
-        { id: "prevAddress", label: "Previous Address", desc: "If abroad, write 'Ausland'", type: "text", placeholder: "e.g. Ausland" },
-        { id: "landlordName", label: "Landlord / Owner Name", desc: "Person or company issuing the Wohnungsgeberbestätigung", type: "text", placeholder: "e.g. Vonovia SE" },
+        { label: "Landlord Signature", desc: "The landlord's physical or authorized digital signature is mandatory here. Photocopied or typed text is rejected.", x: "78%", y: "84%" },
+        { label: "Move-in Date", desc: "Must match your rental contract date exactly. Try to register within 14 days of this date.", x: "25%", y: "45%" },
+        { label: "Previous Residence", desc: "If moving from abroad, write 'Ausland' (Abroad) here. You don't need to specify your old address.", x: "55%", y: "30%" },
+        { label: "Official Stamp", desc: "The clerk stamps and signs this at your appointment. Keep the original paper extremely safe!", x: "82%", y: "22%" }
       ]
     },
     "Banking": {
-      title: "Bank Account Application",
-      sub: "Prepare your data for the VideoIdent verification",
+      title: "Current Account Agreement",
+      sub: "Interactive Account Specifications",
       fields: [
-        { id: "taxId", label: "Tax Identification Number", desc: "If you don't have it yet, leave blank", type: "text", placeholder: "e.g. 12345678901" },
-        { id: "employmentStatus", label: "Employment Status", desc: "Required for overdraft limits", type: "text", placeholder: "e.g. Employed Full-Time" },
-        { id: "monthlyIncome", label: "Estimated Monthly Net Income", desc: "In local currency", type: "number", placeholder: "e.g. 2500" },
+        { label: "Tax Identification Number", desc: "You have 90 days from opening to supply your local Tax ID, or your interest yields are taxed.", x: "30%", y: "70%" },
+        { label: "VideoIdent verification", desc: "Completed via mobile app. Hold your passport steady. Digital copies are strictly forbidden.", x: "70%", y: "42%" },
+        { label: "Overdraft Limit (Dispo)", desc: "Starts at €0 for newcomers until you show 3 consecutive monthly salary deposits.", x: "48%", y: "88%" }
       ]
     },
     "Visas & Permits": {
-      title: "Residence Permit Application (Aufenthaltstitel)",
-      sub: "Draft application details",
+      title: "Residence Permit Form (Aufenthaltstitel)",
+      sub: "Sample Application Sections",
       fields: [
-        { id: "passportNumber", label: "Passport Number", desc: "", type: "text", placeholder: "e.g. AB1234567" },
-        { id: "visaType", label: "Permit Type Requested", desc: "e.g. Blue Card, Student, Freelance", type: "text", placeholder: "e.g. EU Blue Card" },
-        { id: "employerName", label: "Employer Name", desc: "For work visas", type: "text", placeholder: "e.g. Tech Corp GmbH" },
+        { label: "Employer Declaration", desc: "For work visas, your employer must complete the official employment verification attachment.", x: "65%", y: "78%" },
+        { label: "Biometric Picture", desc: "Must be taken in the last 6 months with standard front face angle. Selfies are rejected.", x: "85%", y: "25%" },
+        { label: "Sufficient Subsistence", desc: "Proof of financial stability, like salary slips or a regulated blocked bank account.", x: "32%", y: "55%" }
       ]
     },
     "Housing & Utilities": {
-      title: "Rental Tenant Profile (Mieterselbstauskunft)",
-      sub: "Standard applicant info required by landlords",
+      title: "Rental Contract (Mietvertrag)",
+      sub: "Critical Clauses Blueprint",
       fields: [
-        { id: "currentSalary", label: "Current Net Salary", desc: "Total monthly disposable income", type: "number", placeholder: "e.g. 3000" },
-        { id: "pets", label: "Pets", desc: "List any pets you intend to bring", type: "text", placeholder: "e.g. None" },
-        { id: "instruments", label: "Musical Instruments", desc: "Many contracts require disclosing this", type: "text", placeholder: "e.g. Acoustic Guitar" },
+        { label: "Warm vs Cold Rent", desc: "Cold Rent covers the space. Warm Rent includes water/heating. Internet and power are usually extra.", x: "30%", y: "45%" },
+        { label: "Security Deposit", desc: "Legally capped at 3 months cold rent. Must be deposited in an interest-bearing escrow account.", x: "70%", y: "70%" },
+        { label: "Notice Period", desc: "The legal standard is 3 months notice. Verify if there's an initial minimum lease duration.", x: "50%", y: "85%" }
       ]
     },
     "Health Insurance": {
-      title: "Health Insurance Registration",
-      sub: "Prepare basic signup info",
+      title: "Insurance Card Registration",
+      sub: "Key Benefits Overview",
       fields: [
-        { id: "socialSecurityNumber", label: "Social Security Number (if known)", desc: "Often auto-generated on signup", type: "text", placeholder: "" },
-        { id: "previousInsurance", label: "Previous Health Insurance", desc: "If you had insurance in another EU country", type: "text", placeholder: "e.g. NHS" },
-        { id: "maritalStatus", label: "Marital Status", desc: "Required to determine family co-insurance", type: "text", placeholder: "e.g. Single" },
+        { label: "Social Security Number", desc: "Auto-generated during your initial signup. Vital for your employer's tax department.", x: "40%", y: "35%" },
+        { label: "Primary Care Physician", desc: "Under public insurance, you are free to consult any registered GP (Hausarzt) of your choice.", x: "72%", y: "62%" },
+        { label: "Statutory Co-pays", desc: "Small standard fees of €5 to €10 for prescription medicines, capped based on income.", x: "50%", y: "80%" }
       ]
     }
   };
 
-  const schema = formSchemas[formCategory];
-  if (!schema) return null;
-
-  const handleSave = () => {
-    localStorage.setItem(draftKey, JSON.stringify(formData));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleAutoFill = () => {
-    setAutofillAnimating(true);
-    setTimeout(() => {
-      setAutofillAnimating(false);
-      // Auto-fill logic based on category
-      const filled: Record<string, string> = { ...formData };
-      if (formCategory === "Registration") {
-        filled.fullName = "Maria Silva";
-        filled.prevAddress = "Ausland";
-      } else if (formCategory === "Housing & Utilities") {
-        filled.pets = "None";
-        filled.instruments = "None";
-      } else if (formCategory === "Visas & Permits") {
-        filled.visaType = "EU Blue Card";
-      }
-      setFormData(filled);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }, 800);
-  };
+  const mockup = mockups[toolName];
+  if (!mockup) return null;
 
   return (
-    <div className={`${T.card} rounded-2xl p-5 border border-orange-100 dark:border-zinc-800 shadow-sm relative overflow-hidden cardin mt-4`}>
-      <div className="flex items-center gap-2 mb-4">
-        <div className="bg-orange-500/10 p-1.5 rounded-lg">
-          <FileText size={18} className="text-orange-500" />
-        </div>
+    <div className={`${T.card} rounded-2xl p-5 border border-orange-100 dark:border-zinc-800 shadow-sm relative overflow-hidden cardin`}>
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Interactive Blueprint</p>
-          <h3 className={`font-extrabold text-sm ${T.text}`}>{schema.title}</h3>
+          <div className="flex items-center gap-1.5">
+            <Sparkles size={14} className="text-orange-500" />
+            <p className="text-xs font-bold uppercase tracking-wider text-orange-500">Form Blueprint</p>
+          </div>
+          <p className={`text-sm font-extrabold ${T.text}`}>{mockup.title}</p>
+          <p className={`text-[11px] ${T.sub}`}>{mockup.sub}</p>
+        </div>
+        <div className="bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 px-2 py-1 rounded-md text-[10px] font-bold">
+          Click Hotspots 🗺️
         </div>
       </div>
-      <p className={`text-[11px] ${T.sub} mb-5`}>{schema.sub}</p>
 
-      <div className="space-y-3">
-        {schema.fields.map(field => (
-          <div key={field.id} className="relative group">
-            <label className={`block text-[10px] font-bold uppercase tracking-wider ${T.sub} mb-1 ml-1`}>
-              {field.label}
-            </label>
-            <input 
-              type={field.type}
-              placeholder={field.placeholder}
-              value={formData[field.id] || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, [field.id]: e.target.value }))}
-              className={`w-full ${T.input} rounded-xl px-3 py-2.5 text-sm outline-none border focus:border-orange-500 transition-colors ${T.line}`}
-            />
-            {field.desc && <p className={`mt-1 ml-1 text-[9px] ${T.sub}`}>{field.desc}</p>}
-          </div>
+      <div className="relative border border-orange-100/50 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-950/20 p-6 min-h-[220px] flex flex-col justify-between overflow-hidden">
+        {/* Mockup decorative lines */}
+        <div className="space-y-3">
+          <div className="h-4 bg-orange-100/60 dark:bg-zinc-800/60 rounded w-1/3"></div>
+          <div className="h-2.5 bg-orange-100/30 dark:bg-zinc-800/30 rounded w-2/3"></div>
+          <div className="h-2 bg-orange-100/20 dark:bg-zinc-800/20 rounded w-full"></div>
+          <div className="h-2 bg-orange-100/20 dark:bg-zinc-800/20 rounded w-5/6"></div>
+          <div className="h-2 bg-orange-100/20 dark:bg-zinc-800/20 rounded w-4/5"></div>
+        </div>
+
+        <div className="space-y-3 pt-6 border-t border-orange-100/20 dark:border-zinc-800/20">
+          <div className="h-3 bg-orange-100/40 dark:bg-zinc-800/40 rounded w-1/4"></div>
+          <div className="h-2 bg-orange-100/20 dark:bg-zinc-800/20 rounded w-3/4"></div>
+          <div className="h-2 bg-orange-100/20 dark:bg-zinc-800/20 rounded w-full"></div>
+        </div>
+
+        {/* Floating hotspot buttons */}
+        {mockup.fields.map((f, i) => (
+          <button
+            key={i}
+            onClick={() => setActiveHotspot(activeHotspot === i ? null : i)}
+            style={{ left: f.x, top: f.y }}
+            className={`absolute -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all shadow-md animate-pulse ${
+              activeHotspot === i 
+                ? 'bg-orange-600 text-white scale-110 ring-4 ring-orange-200 dark:ring-orange-800/40' 
+                : 'bg-orange-500 text-white hover:scale-110'
+            }`}
+          >
+            {i + 1}
+          </button>
         ))}
       </div>
 
-      <div className="mt-5 flex gap-2">
-        <button 
-          onClick={handleSave}
-          className={`flex-1 bg-orange-500 text-white font-bold py-2.5 rounded-xl hover:bg-orange-600 transition-colors flex items-center justify-center gap-2 text-sm shadow-sm ${saved ? 'bg-emerald-500 hover:bg-emerald-600' : ''}`}
-        >
-          {saved ? <Check size={16} /> : <Save size={16} />}
-          {saved ? "Saved to Profile" : "Save Draft"}
-        </button>
-        <button 
-          onClick={handleAutoFill}
-          className={`px-3 font-bold rounded-xl border ${T.line} ${T.card} hover:bg-orange-50 dark:hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 relative overflow-hidden`}
-          title="Auto-fill with your Profile data"
-        >
-          {autofillAnimating ? (
-            <div className="absolute inset-0 bg-gradient-to-r from-orange-200 via-orange-400 to-orange-200 dark:from-orange-800 dark:via-orange-600 dark:to-orange-800 opacity-30 animate-pulse" />
-          ) : null}
-          <Wand2 size={16} className={`${autofillAnimating ? 'animate-spin' : ''} text-orange-500`} />
-        </button>
-      </div>
+      {activeHotspot !== null && (
+        <div className="mt-4 p-3.5 bg-white dark:bg-orange-950/10 border border-orange-100 dark:border-orange-950/30 rounded-xl cardin">
+          <p className="text-xs font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1.5">
+            <span className="w-4 h-4 rounded-full bg-orange-600 text-white flex items-center justify-center text-[9px] font-bold">
+              {activeHotspot + 1}
+            </span>
+            <span>{mockup.fields[activeHotspot].label}</span>
+          </p>
+          <p className={`text-xs mt-1.5 leading-relaxed ${T.text}`}>
+            {mockup.fields[activeHotspot].desc}
+          </p>
+        </div>
+      )}
     </div>
   );
 };
@@ -457,8 +426,8 @@ export const ToolDetail = ({ tool, profile, emergencyData, T, setOpenTool, setGo
             </div>
           </div>
 
-          {/* Interactive Document Blueprint */}
-          <InteractiveDocument toolName={tool.name} T={T} user={user} />
+          {/* Interactive Document Blueprint Mockup */}
+          <DocumentMockup toolName={tool.name} T={T} />
 
           {/* Interactive Document Checklist Progress Tracker */}
           {meta.documents.length > 0 && (
@@ -654,13 +623,16 @@ export const ToolDetail = ({ tool, profile, emergencyData, T, setOpenTool, setGo
                 setOpenTool(null);
                 
                 if (user) {
-                  await supabase.from("user_goals").insert({
-                    user_id: user.id,
-                    title: tool.name,
-                    category: tool.category || "Tool Goal",
-                    icon_name: "Wrench",
-                    steps
-                  });
+                  try {
+                    await api.goals.create({
+                      title: tool.name,
+                      category: tool.category || "Tool Goal",
+                      iconName: "Wrench",
+                      steps: steps.map(mapStepToApi)
+                    });
+                  } catch (e) {
+                    console.error("Failed to save goal", e);
+                  }
                 }
               }}
               className="w-full bg-orange-500 text-white rounded-xl p-4 font-bold disp text-base shadow-md hover:shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
@@ -691,16 +663,12 @@ export const ToolsTab = ({ openTool, setOpenTool, toolSectionsData, profile, eme
   const [searchQuery, setSearchQuery] = useState("");
   const selectedToolObj = toolSectionsData.flatMap(s => s.items).find(i => i.name === openTool) || { name: openTool };
 
-  if (openTool === "Cost of Living Planner") {
-    return <CostOfLivingPlanner profile={profile} T={T} onBack={() => setOpenTool(null)} />;
-  }
-
   if (openTool) {
     if (
       openTool === "Local Services & Immigrant Essentials" || 
       openTool === "Local Services" || 
       openTool === "Essential Services & Local Trades" ||
-      openTool.toLowerCase().includes("local services")
+      (typeof openTool === "string" && openTool.toLowerCase().includes("local services"))
     ) {
       return (
         <LocalServicesHub
@@ -739,10 +707,10 @@ export const ToolsTab = ({ openTool, setOpenTool, toolSectionsData, profile, eme
 
   return (
     <div className="pb-24">
-      <Header T={T} hideOnDesktop={true} title="Tools" />
+      <Header T={T} title="Tools" />
       
       {/* Personalized Relocation Overview Header Banner */}
-      <div className="mx-4 lg:mx-0 mb-3 p-4 rounded-2xl bg-gradient-to-br from-orange-400/10 to-orange-600/10 border border-orange-100 dark:border-zinc-800 shadow-sm flex items-center gap-4">
+      <div className="mx-4 mb-5 p-4 rounded-2xl bg-gradient-to-br from-orange-400/10 to-orange-600/10 border border-orange-100 dark:border-zinc-800 shadow-sm flex items-center gap-4">
         <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center text-base shrink-0 font-extrabold shadow-sm">
           {profile.name ? profile.name.substring(0, 2).toUpperCase() : "HI"}
         </div>
@@ -757,51 +725,8 @@ export const ToolsTab = ({ openTool, setOpenTool, toolSectionsData, profile, eme
         </div>
       </div>
 
-      {/* High-Visibility Spotlight Card: Local Services & Essentials in City */}
-      <div 
-        onClick={() => setOpenTool("Local Services & Immigrant Essentials")}
-        className="mx-4 lg:mx-0 mb-5 p-4 rounded-3xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-600/15 border border-amber-300/40 dark:border-zinc-800 shadow-sm cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-all group"
-      >
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-orange-500 text-white shadow-xs flex items-center gap-1">
-            <Sparkles size={11} /> Local Services & Essentials
-          </span>
-          <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">
-            <span>Open directory</span>
-            <ChevronRight size={14} />
-          </span>
-        </div>
-        <div className="flex items-center gap-3.5 mt-2.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
-            <Wrench size={22} />
-          </div>
-          <div>
-            <h3 className={`text-sm font-extrabold ${T.text}`}>
-              Local Trades & Immigrant Essentials in {profile.city}
-            </h3>
-            <p className={`text-[11px] ${T.sub} mt-0.5 leading-tight`}>
-              Find English-speaking plumbers, electricians, locksmiths, local SIM card carriers & public transit bus facilities.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <button
-        onClick={() => setOpenTool("Cost of Living Planner")}
-        className={`mx-4 lg:mx-0 mb-5 w-full p-4 rounded-2xl border ${T.line} ${T.card} text-left flex items-center gap-4 hover:border-orange-400 transition-colors`}
-      >
-        <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-          <DollarSign size={21} />
-        </div>
-        <span className="min-w-0 flex-1">
-          <span className={`block text-sm font-bold ${T.text}`}>Cost of Living Planner</span>
-          <span className={`block text-xs ${T.sub}`}>Compare monthly budgets between cities</span>
-        </span>
-        <ChevronRight size={17} className={T.sub} />
-      </button>
-
       {/* Search Input Box */}
-      <div className={`mx-4 lg:mx-0 mb-5 flex items-center gap-2.5 rounded-full px-4 py-2.5 ${T.card} border ${T.line} shadow-sm`}>
+      <div className={`mx-4 mb-5 flex items-center gap-2.5 rounded-full px-4 py-2.5 ${T.card} border ${T.line} shadow-sm`}>
         <Search size={16} className={T.sub} />
         <input 
           placeholder="Search tools — e.g., register, tax, bank, housing…" 
@@ -818,9 +743,9 @@ export const ToolsTab = ({ openTool, setOpenTool, toolSectionsData, profile, eme
 
       {/* Grid List of Tools */}
       {filteredSections.map(sec => (
-        <div key={sec.label} className="mb-6 mx-4 lg:mx-0">
-          <p className={`mb-2.5 text-xs font-bold uppercase tracking-wider ${T.sub}`}>{sec.label}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+        <div key={sec.label} className="mb-5">
+          <p className={`mx-4 mb-2.5 text-xs font-bold uppercase tracking-wider ${T.sub}`}>{sec.label}</p>
+          <div className="mx-4 grid grid-cols-2 gap-2.5">
             {sec.items.map((it: any) => {
               if (it.name === "Roadmaps") {
                 return (

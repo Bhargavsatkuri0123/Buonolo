@@ -2,78 +2,37 @@ import React from "react";
 import { ArrowLeft } from "lucide-react";
 import { Theme } from "../types";
 import { SAF } from "../constants";
+import meetPeanutLogo from "../assets/images/meetpeanut-logo.jpeg";
+import meetPeanutIcon from "../assets/images/meetpeanut-icon.jpeg";
 
 export const PeanutLogo = ({ size = 24, className = "", monochrome = false }: { size?: number, className?: string, monochrome?: boolean }) => {
-  const outlineColor = monochrome ? "currentColor" : "#FA5C38";
-  const fillColor = monochrome ? "transparent" : "#FFDFBE";
-  const patchColor = monochrome ? "currentColor" : "#FFA450";
-  const eyeColor = monochrome ? "currentColor" : "#1E293B";
-  const clipId = React.useId().replace(/:/g, "");
+  const outlineColor = monochrome ? "currentColor" : "#FF5C00";
+  const fillColor = monochrome ? "transparent" : "#FFD4A8";
+  const gridColor = monochrome ? "currentColor" : "#FFE8CD";
+  const eyeColor = monochrome ? "currentColor" : "#2D1600";
   
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" className={`shrink-0 inline-block ${className}`} fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Meet Peanut Mascot">
-      <defs>
-        <clipPath id={`innerBody-${clipId}`}>
-           <path 
-            transform="translate(12.5, 12.5) scale(0.75)"
-            d="M 35 48 
-               C 33 40, 29 35, 29 26 
-               C 29 14.4, 38.4 5, 50 5 
-               C 61.6 5, 71 14.4, 71 26 
-               C 71 35, 67 40, 65 48 
-               C 63 56, 75 60, 75 70 
-               C 75 83.8, 63.8 95, 50 95 
-               C 36.2 95, 25 83.8, 25 70 
-               C 25 60, 37 56, 35 48 Z" 
-           />
-        </clipPath>
-      </defs>
-
-      {/* Body - Perfect C1 continuous bezier peanut shape */}
+    <svg width={size} height={size} viewBox="0 0 100 100" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Body */}
       <path 
-        d="M 35 48 
-           C 33 40, 29 35, 29 26 
-           C 29 14.4, 38.4 5, 50 5 
-           C 61.6 5, 71 14.4, 71 26 
-           C 71 35, 67 40, 65 48 
-           C 63 56, 75 60, 75 70 
-           C 75 83.8, 63.8 95, 50 95 
-           C 36.2 95, 25 83.8, 25 70 
-           C 25 60, 37 56, 35 48 Z" 
+        d="M 30 31 C 30 10, 70 10, 70 31 C 70 43, 62 47, 62 51 C 62 55, 74 59, 74 74 C 74 97, 26 97, 26 74 C 26 59, 38 55, 38 51 C 38 47, 30 43, 30 31 Z" 
         fill={fillColor} 
         stroke={outlineColor} 
-        strokeWidth={monochrome ? "9" : "8"} 
+        strokeWidth="8" 
         strokeLinejoin="round" 
       />
       
-      {/* Shell Patches */}
-      {!monochrome && (
-        <g clipPath={`url(#innerBody-${clipId})`} opacity={1}>
-          {/* Top */}
-          <rect x="0" y="0" width="46.5" height="32" rx="5" fill={patchColor} />
-          <rect x="53.5" y="0" width="46.5" height="32" rx="5" fill={patchColor} />
-          
-          {/* Middle */}
-          <rect x="0" y="49" width="46.5" height="18" rx="5" fill={patchColor} />
-          <rect x="53.5" y="49" width="46.5" height="18" rx="5" fill={patchColor} />
-          
-          {/* Bottom */}
-          <rect x="0" y="73" width="46.5" height="27" rx="5" fill={patchColor} />
-          <rect x="53.5" y="73" width="46.5" height="27" rx="5" fill={patchColor} />
-        </g>
-      )}
+      {/* Grid Lines */}
+      {/* Vertical */}
+      <line x1="50" y1="21" x2="50" y2="82" stroke={gridColor} strokeWidth="5" strokeLinecap="round" opacity={monochrome ? 0.4 : 1} />
+      {/* Horizontal Top */}
+      <line x1="33" y1="42" x2="67" y2="42" stroke={gridColor} strokeWidth="5" strokeLinecap="round" opacity={monochrome ? 0.4 : 1} />
+      {/* Horizontal Bottom */}
+      <line x1="29" y1="64" x2="71" y2="64" stroke={gridColor} strokeWidth="5" strokeLinecap="round" opacity={monochrome ? 0.4 : 1} />
       
       {/* Eyes */}
-      <ellipse cx="42" cy="41.5" rx="4.5" ry="7.5" fill={eyeColor} />
-      <ellipse cx="58" cy="41.5" rx="4.5" ry="7.5" fill={eyeColor} />
-      {!monochrome && (
-        <>
-          <circle cx="43.5" cy="39" r="1.5" fill="#ffffff" />
-          <circle cx="59.5" cy="39" r="1.5" fill="#ffffff" />
-          {/* Friendly happy smile */}
-          <path d="M 46 48.5 Q 50 52.5 54 48.5" stroke={eyeColor} strokeWidth="2.5" strokeLinecap="round" />
-        </>
-      )}
+      <ellipse cx="41.5" cy="30" rx="3.5" ry="6" fill={eyeColor} />
+      <ellipse cx="58.5" cy="30" rx="3.5" ry="6" fill={eyeColor} />
     </svg>
   );
 };
@@ -89,58 +48,18 @@ export const Face = ({ h = 22, color = "#fff" }: { h?: number; color?: string })
   </svg>
 );
 
-export const AppIcon = ({ size = 56, className = "" }: { size?: number; className?: string }) => (
-  <div 
-    className={`rounded-2xl flex items-center justify-center shadow-md bg-gradient-to-b from-[#FFFDF9] to-[#FFF3E8] dark:from-neutral-800 dark:to-neutral-900 border border-orange-200/80 dark:border-neutral-700 overflow-hidden shrink-0 ${className}`} 
-    style={{ width: size, height: size }}
-  >
-    <PeanutLogo size={Math.round(size * 0.72)} />
+export const AppIcon = ({ size = 56 }: { size?: number }) => (
+  <div className="rounded-2xl shadow-md bg-white overflow-hidden" style={{ width: size, height: size }}>
+    <img src={meetPeanutIcon} alt="Meet Peanut" className="w-full h-full object-cover" />
   </div>
 );
 
-export const Logo = ({ 
-  onSaffron = false, 
-  onClick, 
-  size = 28, 
-  showIcon = true,
-  className = "" 
-}: { 
-  onSaffron?: boolean; 
-  onClick?: () => void; 
-  size?: number; 
-  showIcon?: boolean; 
-  className?: string; 
-}) => (
-  <div 
-    className={`inline-flex items-center gap-2 select-none group ${onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''} ${className}`} 
+export const Logo = ({ onSaffron = false, onClick }: { onSaffron?: boolean; onClick?: () => void }) => (
+  <div
+    className={`inline-flex items-center rounded-xl bg-white px-2 py-1 ${onClick ? 'cursor-pointer' : ''}`}
     onClick={onClick}
-    role={onClick ? "button" : undefined}
   >
-    {showIcon && (
-      <div className="transition-transform group-hover:scale-105 duration-200 shrink-0">
-        <PeanutLogo size={Math.round(size * 1.15)} />
-      </div>
-    )}
-    <div className="flex items-center gap-1 leading-none tracking-tighter" style={{ fontFamily: "'Baloo 2', cursive" }}>
-      <span 
-        className="font-extrabold text-slate-800 dark:text-white transition-colors" 
-        style={{ 
-          fontSize: `${size}px`, 
-          color: onSaffron ? "#FFFFFF" : undefined 
-        }}
-      >
-        meet
-      </span>
-      <span 
-        className="font-extrabold text-[#FA5C38]" 
-        style={{ 
-          fontSize: `${size}px`, 
-          color: onSaffron ? "#FFF1EC" : "#FA5C38" 
-        }}
-      >
-        peanut
-      </span>
-    </div>
+    <img src={meetPeanutLogo} alt="Meet Peanut" className="h-6 w-auto object-contain" />
   </div>
 );
 
@@ -150,12 +69,10 @@ interface HeaderProps {
   right?: React.ReactNode;
   onLogoClick?: () => void;
   T: Theme;
-  className?: string;
-  hideOnDesktop?: boolean;
 }
 
-export const Header = ({ title, back, right, onLogoClick, T, className = "", hideOnDesktop = false }: HeaderProps) => (
-  <div className={`sticky top-0 z-20 ${T.bg} px-4 pt-4 pb-3 flex items-center justify-between ${hideOnDesktop ? 'md:hidden' : ''} ${className}`}>
+export const Header = ({ title, back, right, onLogoClick, T }: HeaderProps) => (
+  <div className={`sticky top-0 z-20 ${T.bg} px-4 pt-4 pb-3 flex items-center justify-between`}>
     <div className="flex items-center gap-3">
       {back && (
         <button onClick={back} className={`p-1 rounded-full ${T.card2}`}>

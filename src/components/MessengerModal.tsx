@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React from "react";
 import { ArrowLeft, Send, MessageCircle } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { Theme } from "../types";
@@ -19,23 +19,9 @@ export const MessengerModal = ({
   isOpen, onClose, activeMessageThread, setActiveMessageThread,
   messageText, setMessageText, handleSendMessage, directMessages, T
 }: MessengerModalProps) => {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [directMessages, activeMessageThread]);
-
   if (!isOpen) return null;
   const threads = Array.from(new Set(directMessages.map((m: any) => m.threadId))).filter(Boolean);
-  const getThreadInfo = (tid: string) => {
-    const msg = directMessages.find((m: any) => m.threadId === tid);
-    return {
-      name: msg?.threadName || tid,
-      avatar: msg?.threadAvatar
-    };
-  };
+  const getThreadName = (tid: string) => directMessages.find((m: any) => m.threadId === tid)?.threadName || tid;
 
   return (
     <div className={`fixed inset-0 z-[110] flex flex-col ${T.bg}`}>
@@ -44,7 +30,7 @@ export const MessengerModal = ({
           <ArrowLeft size={18} className={T.text} />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className={`disp font-bold text-xl ${T.text} truncate`}>{activeMessageThread ? getThreadInfo(activeMessageThread).name : "Messenger"}</h1>
+          <h1 className={`disp font-bold text-xl ${T.text} truncate`}>{activeMessageThread ? getThreadName(activeMessageThread) : "Messenger"}</h1>
           {activeMessageThread && <p className="text-[11px] text-emerald-500 font-medium flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" /> Active now</p>}
         </div>
       </div>
@@ -53,8 +39,8 @@ export const MessengerModal = ({
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 no-scrollbar">
             {directMessages.filter((m: any) => m.threadId === activeMessageThread && !m.isFake).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
-                <Avatar name={getThreadInfo(activeMessageThread).name} url={getThreadInfo(activeMessageThread).avatar} size={14} />
-                <p className={`text-base font-bold ${T.text}`}>{getThreadInfo(activeMessageThread).name}</p>
+                <Avatar name={getThreadName(activeMessageThread)} size={14} />
+                <p className={`text-base font-bold ${T.text}`}>{getThreadName(activeMessageThread)}</p>
                 <p className={`text-xs ${T.sub} max-w-xs`}>
                   Say hello to connect with fellow expats and locals in your new city!
                 </p>
@@ -91,7 +77,6 @@ export const MessengerModal = ({
                 </div>
               ))
             )}
-            <div ref={messagesEndRef} />
           </div>
           <div className={`p-4 border-t ${T.line}`}>
             <div className={`flex items-center gap-2 rounded-full px-4 py-2.5 ${T.card2} border border-orange-200/50 dark:border-zinc-800 focus-within:border-orange-500 transition-colors`}>
@@ -99,7 +84,7 @@ export const MessengerModal = ({
                 value={messageText} 
                 onChange={e => setMessageText(e.target.value)} 
                 onKeyDown={e => e.key === 'Enter' && handleSendMessage()} 
-                placeholder={`Message ${getThreadInfo(activeMessageThread).name}...`} 
+                placeholder={`Message ${getThreadName(activeMessageThread)}...`} 
                 className={`bg-transparent outline-none flex-1 text-sm ${T.text}`} 
               />
               <button 
@@ -129,17 +114,16 @@ export const MessengerModal = ({
               const threadMsgs = directMessages.filter((m: any) => m.threadId === t && !m.isFake);
               const lastMsg = threadMsgs.slice(-1)[0]?.text || "Say hello to start chatting...";
               const lastTime = threadMsgs.slice(-1)[0]?.time || "";
-              const tInfo = getThreadInfo(t);
               return (
                 <button 
                   key={t} 
                   onClick={() => setActiveMessageThread(t)} 
                   className={`w-full flex items-center gap-3 p-4 hover:${T.card2} border-b border-orange-50/50 dark:border-zinc-800/50 transition-colors text-left`}
                 >
-                  <Avatar name={tInfo.name} url={tInfo.avatar} />
+                  <Avatar name={getThreadName(t)} />
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-0.5">
-                      <p className={`font-bold text-sm ${T.text} truncate`}>{tInfo.name}</p>
+                      <p className={`font-bold text-sm ${T.text} truncate`}>{getThreadName(t)}</p>
                       {lastTime && <span className={`text-[10px] ${T.sub}`}>{lastTime}</span>}
                     </div>
                     <p className={`text-xs ${T.sub} truncate`}>{lastMsg}</p>

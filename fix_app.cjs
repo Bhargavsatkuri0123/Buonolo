@@ -1,23 +1,21 @@
 const fs = require('fs');
+
 let code = fs.readFileSync('App.tsx', 'utf8');
-
-// Fix postsChannel undefined
-code = code.replace(`supabase.removeChannel(postsChannel);`, `// supabase.removeChannel(postsChannel);`);
-
-// Find where to put the fetchPosts and postsChannel
-code = code.replace(`const fetchPosts = async () => {`, `
-  useEffect(() => {
-    if (user) {
-      fetchPosts();
-      const postsChannel = supabase.channel('realtime_posts')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-          fetchPosts();
-        })
-        .subscribe();
-      return () => { supabase.removeChannel(postsChannel); };
-    }
-  }, [user]);
-
-  const fetchPosts = async () => {`);
+code = code.replace(
+  'const addReaction = (id: string, emoji: string) => {};',
+  `const addReaction = (id: string, emoji: string) => {
+    setFeed(prev => prev.map(p => {
+      if (p.id === id) {
+        return {
+          ...p,
+          myReaction: emoji,
+          liked: true,
+          likes: p.myReaction || p.liked ? p.likes : p.likes + 1
+        };
+      }
+      return p;
+    }));
+  };`
+);
 
 fs.writeFileSync('App.tsx', code);
