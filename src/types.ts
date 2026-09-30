@@ -3,15 +3,21 @@ import { LucideIcon } from "lucide-react";
 export interface Profile {
   id?: string;
   name: string;
+  full_name?: string;
   handle: string;
-  email?: string;
   origin: string;
+  origin_country?: string;
   host: string;
+  host_country?: string;
   city: string;
+  host_city?: string;
+  situation?: string;
+  focus?: string;
   followers: number;
   following: number;
   bio: string;
-  notificationsEnabled?: boolean;
+  avatar_url?: string;
+  languages?: string[];
 }
 
 export interface Post {
@@ -54,6 +60,26 @@ export interface Step {
   done: boolean;
   tool: string;
   links?: { label: string; url: string; type: "video" | "web" | "doc" }[];
+}
+
+export interface LocationProfile {
+  id: string;
+  origin: string;
+  host: string;
+  city: string;
+  label?: string;
+  createdAt: string;
+  isActive: boolean;
+  notes?: string;
+}
+
+export interface LocationPreferences {
+  blendCommunities: boolean;
+  blendFeed: boolean;
+  keepFriends: boolean;
+  roadmapAction: "fresh" | "merge" | "keep" | "archive";
+  newsScope: "new_only" | "all_locations" | "all";
+  servicesCitySync: boolean;
 }
 
 export interface Theme {

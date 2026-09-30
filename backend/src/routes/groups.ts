@@ -8,6 +8,15 @@ import { publishEvent } from "../ws/gateway.js";
 
 export const groupsRouter = Router();
 
+groupsRouter.delete(
+  "/memberships",
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    await prisma.groupMember.deleteMany({ where: { userId: req.userId! } });
+    res.status(204).end();
+  })
+);
+
 groupsRouter.get(
   "/",
   optionalAuth,
@@ -152,6 +161,24 @@ groupsRouter.post(
     });
     await publishEvent({ type: "group:update", payload: update });
     res.status(201).json({ update });
+  })
+);
+
+groupsRouter.delete(
+  "/:id/updates/:updateId",
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    const update = await prisma.groupUpdate.findUnique({
+      where: { id: req.params.updateId },
+      include: { group: { select: { adminId: true } } },
+    });
+    if (!update || update.groupId !== req.params.id) throw new HttpError(404, "Group update not found");
+    if (update.authorId !== req.userId && update.group.adminId !== req.userId) {
+      throw new HttpError(403, "Only the author or group admin can delete this update");
+    }
+    await prisma.groupUpdate.delete({ where: { id: update.id } });
+    await publishEvent({ type: "group:update", payload: { groupId: update.groupId, id: update.id, deleted: true } });
+    res.status(204).end();
   })
 );
 

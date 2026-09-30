@@ -95,7 +95,7 @@ postsRouter.get(
 
 const createPostSchema = z.object({
   content: z.string().min(1).max(5000),
-  attachment: z.string().url().optional(),
+  attachment: z.string().min(1).refine((value) => value.startsWith("/uploads/") || URL.canParse(value), "Invalid attachment URL").optional(),
   bgTheme: z.string().optional(),
   feeling: z.string().optional(),
   location: z.string().optional(),

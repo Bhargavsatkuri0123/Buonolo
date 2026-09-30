@@ -19,24 +19,25 @@ export const CommentSection = ({ p, user, profile, T }: CommentSectionProps) => 
 
   const fetchComments = useCallback(async () => {
     try {
-      const { comments: apiComments } = await api.posts.comments(p.id);
-      setComments(apiComments.map((c: any) => ({
-        id: c.id,
-        author_name: c.author?.fullName || (c.author?.id === user?.id ? (profile?.name || "Me") : "Community Member"),
-        content: c.content || "",
-        created_at: c.createdAt,
-        user_id: c.author?.id
+      const { comments: items } = await api.posts.comments(p.id);
+      setComments(items.map((comment: any) => ({
+        id: comment.id,
+        author_name: comment.author?.fullName || (comment.authorId === user?.id ? profile?.name : "Community Member"),
+        content: comment.content,
+        created_at: comment.createdAt,
+        user_id: comment.authorId,
       })));
-    } catch (e) {
-      console.error("Failed to load comments", e);
+    } catch (error) {
+      console.error("Failed to load comments", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [p.id, user?.id, profile?.name]);
 
   useEffect(() => {
-    fetchComments();
-    return wsClient.subscribe('comment:new', (payload: any) => {
-      if (payload?.postId === p.id) fetchComments();
+    void fetchComments();
+    return wsClient.subscribe("comment:new", (comment: any) => {
+      if (comment.postId === p.id) void fetchComments();
     });
   }, [p.id, fetchComments]);
 
@@ -44,13 +45,13 @@ export const CommentSection = ({ p, user, profile, T }: CommentSectionProps) => 
     if (!commentText.trim() || !user) return;
     const textToSubmit = commentText;
     setCommentText(""); // Clear early for better UX
-
+    
     try {
       await api.posts.addComment(p.id, textToSubmit);
-      fetchComments();
-    } catch (e) {
-      console.error("Error adding comment:", e);
-      setCommentText(textToSubmit); // Restore on error
+      await fetchComments();
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      setCommentText(textToSubmit);
     }
   };
 
@@ -74,17 +75,17 @@ export const CommentSection = ({ p, user, profile, T }: CommentSectionProps) => 
       <div className="flex gap-2 items-center">
         <Avatar name={profile?.name || "User"} size={6} />
         <div className={`flex-1 flex items-center rounded-full px-3 py-1.5 ${T.card2}`}>
-          <input
-            type="text"
-            value={commentText}
-            onChange={e => setCommentText(e.target.value)}
-            placeholder="Write a comment..."
+          <input 
+            type="text" 
+            value={commentText} 
+            onChange={e => setCommentText(e.target.value)} 
+            placeholder="Write a comment..." 
             className={`bg-transparent outline-none flex-1 text-sm ${T.text}`}
             onKeyDown={e => e.key === 'Enter' && handleAddComment()}
           />
-          <button
-            onClick={handleAddComment}
-            disabled={!commentText.trim()}
+          <button 
+            onClick={handleAddComment} 
+            disabled={!commentText.trim()} 
             className={`ml-2 ${commentText.trim() ? "text-orange-500" : "text-gray-400"}`}
           >
             <Send size={16} />

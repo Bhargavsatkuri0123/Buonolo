@@ -14,6 +14,10 @@ const updateProfileSchema = z.object({
   host: z.string().max(120).optional(),
   city: z.string().max(120).optional(),
   bio: z.string().max(1000).optional(),
+  avatarUrl: z.string().min(1).refine((value) => value.startsWith("/uploads/") || URL.canParse(value), "Invalid avatar URL").nullable().optional(),
+  languages: z.array(z.string().max(80)).max(20).optional(),
+  situation: z.string().max(120).nullable().optional(),
+  focus: z.string().max(120).nullable().optional(),
   notificationsEnabled: z.boolean().optional(),
 });
 
@@ -84,7 +88,7 @@ usersRouter.get(
       },
       take: 20,
       orderBy: q ? undefined : { createdAt: "desc" },
-      select: { id: true, fullName: true, handle: true, origin: true, bio: true },
+      select: { id: true, fullName: true, handle: true, origin: true, host: true, city: true, bio: true, avatarUrl: true, languages: true },
     });
     res.json({ users });
   })

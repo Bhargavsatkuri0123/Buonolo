@@ -30,6 +30,10 @@ model User {
   host                  String?
   city                  String?
   bio                   String   @default("")
+  avatarUrl             String?
+  languages             Json     @default("[]")
+  situation             String?
+  focus                 String?
   notificationsEnabled  Boolean  @default(true)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

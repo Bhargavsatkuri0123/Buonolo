@@ -6,6 +6,15 @@ import { requireAuth, type AuthedRequest } from "../middleware/auth.js";
 
 export const goalsRouter = Router();
 
+goalsRouter.delete(
+  "/",
+  requireAuth,
+  asyncHandler(async (req: AuthedRequest, res) => {
+    await prisma.goal.deleteMany({ where: { userId: req.userId! } });
+    res.status(204).end();
+  })
+);
+
 const linkSchema = z.object({ label: z.string(), url: z.string(), type: z.enum(["video", "web", "doc"]) });
 const stepSchema = z.object({
   text: z.string().min(1).max(300),

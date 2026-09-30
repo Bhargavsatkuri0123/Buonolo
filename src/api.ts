@@ -53,6 +53,10 @@ export interface ProfileDto {
   host: string | null;
   city: string | null;
   bio: string | null;
+  avatarUrl: string | null;
+  languages: string[];
+  situation: string | null;
+  focus: string | null;
   followers: number;
   following: number;
   notificationsEnabled: boolean;
@@ -172,9 +176,9 @@ export const api = {
   },
 
   users: {
-    updateMe: (patch: Partial<{ fullName: string; origin: string; host: string; city: string; bio: string; notificationsEnabled: boolean }>) =>
+    updateMe: (patch: Partial<{ fullName: string; origin: string; host: string; city: string; bio: string; avatarUrl: string | null; languages: string[]; situation: string | null; focus: string | null; notificationsEnabled: boolean }>) =>
       request<{ profile: ProfileDto }>("/api/users/me", { method: "PATCH", body: JSON.stringify(patch) }),
-    search: (q: string) => request<{ users: { id: string; fullName: string; handle: string; origin: string; bio: string }[] }>(`/api/users/search${qs({ q })}`),
+    search: (q: string) => request<{ users: { id: string; fullName: string; handle: string; origin: string | null; host: string | null; city: string | null; bio: string; avatarUrl: string | null; languages: string[] }[] }>(`/api/users/search${qs({ q })}`),
     following: () => request<{ users: any[] }>("/api/users/me/following"),
     get: (id: string) => request<{ profile: ProfileDto; isFollowing: boolean }>(`/api/users/${id}`),
     follow: (id: string) => request<void>(`/api/users/${id}/follow`, { method: "POST" }),
@@ -197,6 +201,7 @@ export const api = {
 
   groups: {
     list: () => request<{ groups: any[] }>("/api/groups"),
+    leaveAll: () => request<void>("/api/groups/memberships", { method: "DELETE" }),
     create: (data: { name: string; description?: string; category?: string; emoji?: string }) =>
       request<{ group: any }>("/api/groups", { method: "POST", body: JSON.stringify(data) }),
     get: (id: string) => request<{ group: any }>(`/api/groups/${id}`),
@@ -205,6 +210,7 @@ export const api = {
     leave: (id: string) => request<void>(`/api/groups/${id}/join`, { method: "DELETE" }),
     updates: (id: string) => request<{ updates: any[] }>(`/api/groups/${id}/updates`),
     postUpdate: (id: string, content: string) => request<{ update: any }>(`/api/groups/${id}/updates`, { method: "POST", body: JSON.stringify({ content }) }),
+    removeUpdate: (id: string, updateId: string) => request<void>(`/api/groups/${id}/updates/${updateId}`, { method: "DELETE" }),
     invite: (id: string, inviteeId: string) => request<{ invite: any }>(`/api/groups/${id}/invites`, { method: "POST", body: JSON.stringify({ inviteeId }) }),
     receivedInvites: () => request<{ invites: any[] }>("/api/groups/invites/received"),
     respondInvite: (inviteId: string, status: "ACCEPTED" | "DECLINED") =>
@@ -213,6 +219,7 @@ export const api = {
 
   events: {
     list: () => request<{ events: any[] }>("/api/events"),
+    attendees: (id: string) => request<{ attendees: any[] }>(`/api/events/${id}/attendees`),
     create: (data: { title: string; description?: string; image?: string; date: string; location: string }) =>
       request<{ event: any }>("/api/events", { method: "POST", body: JSON.stringify(data) }),
     rsvp: (id: string) => request<void>(`/api/events/${id}/rsvp`, { method: "POST" }),
@@ -221,6 +228,7 @@ export const api = {
 
   goals: {
     list: () => request<{ goals: any[] }>("/api/goals"),
+    removeAll: () => request<void>("/api/goals", { method: "DELETE" }),
     create: (data: { title: string; category: string; iconName?: string; steps?: any[] }) =>
       request<{ goal: any }>("/api/goals", { method: "POST", body: JSON.stringify(data) }),
     fromTemplate: (templateId: string) => request<{ goal: any }>(`/api/goals/from-template/${templateId}`, { method: "POST" }),
@@ -234,6 +242,13 @@ export const api = {
 
   content: {
     goalTemplates: () => request<{ templates: any[] }>("/api/content/goal-templates"),
+    hostInfo: (params: { host: string; city: string; origin?: string }) =>
+      request<{ hostInfo: any; source: string }>(`/api/content/host-info${qs(params)}`),
+  },
+
+  bot: {
+    chat: (data: { message: string; history?: { role: "user" | "model"; text: string }[] }) =>
+      request<{ reply: string }>("/api/bot/chat", { method: "POST", body: JSON.stringify(data) }),
   },
 
   messages: {
@@ -244,8 +259,11 @@ export const api = {
 
   notifications: {
     list: () => request<{ notifications: any[] }>("/api/notifications"),
+    create: (data: { title: string; body: string; type?: string }) =>
+      request<{ notification: any }>("/api/notifications", { method: "POST", body: JSON.stringify(data) }),
     markRead: (id: string) => request<void>(`/api/notifications/${id}/read`, { method: "PATCH" }),
     readAll: () => request<void>("/api/notifications/read-all", { method: "POST" }),
+    remove: (id: string) => request<void>(`/api/notifications/${id}`, { method: "DELETE" }),
   },
 
   uploads: {
@@ -269,6 +287,10 @@ export function mapProfileFromApi(p: ProfileDto) {
     followers: p.followers || 0,
     following: p.following || 0,
     bio: p.bio || "",
+    avatar_url: p.avatarUrl || "",
+    languages: p.languages || [],
+    situation: p.situation || "",
+    focus: p.focus || "",
     notificationsEnabled: p.notificationsEnabled,
   };
 }

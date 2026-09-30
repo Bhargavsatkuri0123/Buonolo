@@ -9,6 +9,10 @@ export interface ProfileDto {
   host: string | null;
   city: string | null;
   bio: string;
+  avatarUrl: string | null;
+  languages: string[];
+  situation: string | null;
+  focus: string | null;
   followers: number;
   following: number;
   notificationsEnabled: boolean;
@@ -29,6 +33,10 @@ export async function loadProfile(userId: string): Promise<ProfileDto | null> {
     host: user.host,
     city: user.city,
     bio: user.bio,
+    avatarUrl: user.avatarUrl,
+    languages: Array.isArray(user.languages) ? user.languages as string[] : [],
+    situation: user.situation,
+    focus: user.focus,
     followers: user._count.followers,
     following: user._count.following,
     notificationsEnabled: user.notificationsEnabled,

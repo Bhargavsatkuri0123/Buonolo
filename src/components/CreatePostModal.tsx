@@ -7,13 +7,12 @@ import { Profile, Theme } from "../types";
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onPosted?: () => void;
   profile: Profile;
   user: any;
   T: Theme;
 }
 
-export const CreatePostModal = ({ isOpen, onClose, onPosted, profile, user, T }: CreatePostModalProps) => {
+export const CreatePostModal = ({ isOpen, onClose, profile, user, T }: CreatePostModalProps) => {
   const [postText, setPostText] = useState("");
   const [bgTheme, setBgTheme] = useState("");
   const [privacy, setPrivacy] = useState("Public");
@@ -21,22 +20,29 @@ export const CreatePostModal = ({ isOpen, onClose, onPosted, profile, user, T }:
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [feeling, setFeeling] = useState("");
   const [location, setLocation] = useState("");
-  const [tagged, setTagged] = useState<{ id: string; name: string }[]>([]);
+  const [tagged, setTagged] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeMenu, setActiveMenu] = useState<"feeling" | "location" | "tag" | "settings" | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dynamicFriends, setDynamicFriends] = useState<{ id: string; name: string }[]>([]);
+  const [dynamicFriends, setDynamicFriends] = useState<string[]>([]);
+  const [dynamicLocations, setDynamicLocations] = useState<string[]>([]);
+  const [dynamicFriendIds, setDynamicFriendIds] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isOpen && user) {
       const fetchMetadata = async () => {
         try {
           const { users } = await api.users.search("");
-          setDynamicFriends(users.filter(u => u.id !== user.id).map(u => ({ id: u.id, name: u.fullName })));
-        } catch {
-          /* fall back to static defaults below */
+          setDynamicFriendIds(Object.fromEntries(users.map((candidate) => [candidate.fullName, candidate.id])));
+          setDynamicFriends(Array.from(new Set(users.map((candidate) => candidate.fullName).filter(Boolean))));
+          setDynamicLocations(Array.from(new Set(users.map((candidate) => {
+            if (candidate.city && candidate.host) return `${candidate.city}, ${candidate.host}`;
+            return candidate.city || candidate.host || null;
+          }).filter(Boolean)) as string[]);
+        } catch (error) {
+          console.error("Failed to load post metadata", error);
         }
       };
       fetchMetadata();
@@ -51,24 +57,24 @@ export const CreatePostModal = ({ isOpen, onClose, onPosted, profile, user, T }:
     setLoading(true);
     
     try {
-      let attachmentUrl = attachment ?? undefined;
-
+      let attachmentUrl = attachment;
+      
       if (attachmentFile) {
-        const { url } = await api.uploads.upload(attachmentFile);
-        attachmentUrl = url;
+        const uploaded = await api.uploads.upload(attachmentFile);
+        attachmentUrl = uploaded.url;
       }
-
+      
       if (user) {
         await api.posts.create({
           content: postText || (attachmentUrl ? "[Image]" : ""),
-          attachment: attachmentUrl,
-          bgTheme,
-          feeling,
-          location,
+          attachment: attachmentUrl || undefined,
+          bgTheme: bgTheme || undefined,
+          feeling: feeling || undefined,
+          location: location || undefined,
+          taggedUserIds: tagged.map((name) => dynamicFriendIds[name]).filter(Boolean),
           privacy: privacy.toUpperCase() as "PUBLIC" | "FRIENDS" | "PRIVATE",
-          taggedUserIds: tagged.map(t => t.id)
         });
-
+        
         setPostText("");
         setAttachment(null);
         setAttachmentFile(null);
@@ -76,7 +82,6 @@ export const CreatePostModal = ({ isOpen, onClose, onPosted, profile, user, T }:
         setLocation("");
         setTagged([]);
         onClose();
-        onPosted?.();
       }
     } catch (e: any) {
       setError(e.message);
@@ -94,9 +99,9 @@ export const CreatePostModal = ({ isOpen, onClose, onPosted, profile, user, T }:
     }
   };
 
-  const friendsList = dynamicFriends.length > 0 ? dynamicFriends : ["Alex", "Sam", "Maria", "David", "Jessica"].map(name => ({ id: name, name }));
+  const friendsList = dynamicFriends.length > 0 ? dynamicFriends : ["Alex", "Sam", "Maria", "David", "Jessica"];
   const feelingsList = ["happy 😊", "sad 😢", "good 👍", "bad 👎", "excited 🤩", "blessed 🙏", "loved ❤️"];
-  const locationList = ["Berlin, Germany", "New York, USA", "London, UK", "Paris, France", "Tokyo, Japan"];
+  const locationList = dynamicLocations.length > 0 ? dynamicLocations : ["Berlin, Germany", "New York, USA", "London, UK", "Paris, France", "Tokyo, Japan"];
   const backgrounds = ["", "bg-red-500", "bg-blue-500", "bg-orange-500", "bg-green-500", "bg-purple-500", "bg-gradient-to-r from-cyan-500 to-blue-500", "bg-gradient-to-r from-fuchsia-500 to-pink-500"];
 
   if (activeMenu) {
@@ -125,12 +130,12 @@ export const CreatePostModal = ({ isOpen, onClose, onPosted, profile, user, T }:
             </button>
           ))}
           {activeMenu === "tag" && friendsList.map(fr => (
-            <button key={fr.id} onClick={() => setTagged(prev => prev.some(t => t.id === fr.id) ? prev.filter(t => t.id !== fr.id) : [...prev, fr])} className={`w-full text-left px-4 py-3 hover:${T.card2} rounded-xl ${T.text} flex items-center justify-between`}>
+            <button key={fr} onClick={() => setTagged(prev => prev.includes(fr) ? prev.filter(t => t !== fr) : [...prev, fr])} className={`w-full text-left px-4 py-3 hover:${T.card2} rounded-xl ${T.text} flex items-center justify-between`}>
               <div className="flex items-center gap-3">
-                <Avatar name={fr.name} />
-                <span className="font-semibold">{fr.name}</span>
+                <Avatar name={fr} />
+                <span className="font-semibold">{fr}</span>
               </div>
-              {tagged.some(t => t.id === fr.id) && <Check size={18} className="text-orange-500" />}
+              {tagged.includes(fr) && <Check size={18} className="text-orange-500" />}
             </button>
           ))}
         </div>

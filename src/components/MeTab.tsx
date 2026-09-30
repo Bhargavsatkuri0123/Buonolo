@@ -1,8 +1,13 @@
 import React, { useState } from "react";
-import { Newspaper, LayoutGrid, List, ChevronLeft, ChevronRight, Moon, Sun, Globe2, Shield, LogOut, Info, Bookmark, MapPin, Users, Settings, ChevronDown, ChevronUp, ArrowRight, BookOpen, Clock, Globe } from "lucide-react";
+import { 
+  Newspaper, LayoutGrid, List, ChevronLeft, ChevronRight, Moon, Sun, Globe2, 
+  Shield, LogOut, Info, Bookmark, MapPin, Users, Settings, ChevronDown, ChevronUp, 
+  ArrowRight, BookOpen, Clock, Globe, Upload, Camera, X, RefreshCw, Layers, 
+  Sparkles, Sliders, Plus, Check, Trash2 
+} from "lucide-react";
 import { Header, Logo, AppIcon } from "./Header";
 import { Avatar } from "./Avatar";
-import { Theme, Profile, Post } from "../types";
+import { Theme, Profile, Post, LocationProfile, LocationPreferences } from "../types";
 import { LOCATIONS, LANGS, SAF } from "../constants";
 import { GroupView, EventView, UserView } from "./CommunityTab";
 import { InAppNewsViewer } from "./InAppNewsViewer";
@@ -35,12 +40,20 @@ interface MeTabProps {
   T: Theme;
   toggleSave: (id: string) => void;
   user?: any;
+  locationProfiles: LocationProfile[];
+  setLocationProfiles: React.Dispatch<React.SetStateAction<LocationProfile[]>>;
+  locationPrefs: LocationPreferences;
+  setLocationPrefs: React.Dispatch<React.SetStateAction<LocationPreferences>>;
+  applyLocationChange: (newOrigin: string, newHost: string, newCity: string) => Promise<{ success: boolean; error?: string }>;
+  onOpenLanding?: () => void;
 }
 
 export const MeTab = ({
   meScreen, setMeScreen, profile, setProfile, feed, newsData, newsIdx, setNewsIdx, newsMode, setNewsMode,
   dark, setDark, lang, setLang, notif, setNotif, settingsSubScreen, setSettingsSubScreen,
-  handleLogout, fetchHostInfo, isUpdatingHost, setToastError, communitiesData, T, toggleSave, user
+  handleLogout, fetchHostInfo, isUpdatingHost, setToastError, communitiesData, T, toggleSave, user,
+  locationProfiles, setLocationProfiles, locationPrefs, setLocationPrefs, applyLocationChange,
+  onOpenLanding
 }: MeTabProps) => {
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
 
@@ -213,28 +226,152 @@ export const MeTab = ({
               const finalHost = hostData.hostSelect === "Other" ? hostData.customHost : hostData.hostSelect;
               const finalCity = hostData.citySelect === "Other" ? hostData.customCity : hostData.citySelect;
               if (!finalHost || !finalCity) return;
-              const result = await fetchHostInfo(profile.origin, finalHost, finalCity);
-              if (result.success) {
-                if (user) {
-                  try {
-                    await api.users.updateMe({ host: finalHost, city: finalCity });
-                  } catch (e) {
-                    console.error("Failed to update host", e);
-                  }
-                }
-                setProfile({ ...profile, host: finalHost, city: finalCity });
-              } else {
-                setToastError(result.error || "Failed to update host.");
+              const result = await applyLocationChange(profile.origin, finalHost, finalCity);
+              if (!result.success) {
+                setToastError(result.error || "Failed to update host location.");
                 setTimeout(() => setToastError(""), 5000);
+              } else {
+                setSettingsSubScreen("root");
               }
             }}
             disabled={isUpdatingHost || (hostData.hostSelect === "Other" && !hostData.customHost) || (hostData.citySelect === "Other" && !hostData.customCity) || (hostData.hostSelect === "Other" && !hostData.customCity)}
             className={`${isUpdatingHost ? 'opacity-50' : ''} bg-orange-500 text-white font-bold text-sm px-4 py-2 rounded-xl w-full`}>
-              {isUpdatingHost ? 'Requesting...' : 'Request change'}
+              {isUpdatingHost ? 'Updating App & Services...' : 'Update location & adapt app'}
           </button>
         </div>
       </div>
     );
+
+    if (settingsSubScreen === "location-prefs") {
+      return (
+        <div className="pb-24">
+          <Header T={T} title="Location & Data Options" back={() => setSettingsSubScreen("root")} />
+          
+          <div className="mx-4 mb-4 p-4 rounded-2xl bg-gradient-to-br from-orange-400/10 via-amber-400/10 to-orange-600/10 border border-orange-200 dark:border-zinc-800 shadow-xs">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles size={16} className="text-orange-500" />
+              <span className="text-xs font-extrabold uppercase tracking-wider text-orange-600 dark:text-orange-400">Relocation Migration Preferences</span>
+            </div>
+            <p className={`text-xs ${T.sub} leading-relaxed`}>
+              Control what data is preserved or refreshed when moving to a new city. Meet Peanut dynamically updates local news, emergency numbers, trades directories, and bus guides while giving you full control over past communities and feeds.
+            </p>
+          </div>
+
+          <p className={`mx-4 mb-2 text-xs font-bold uppercase tracking-wider ${T.sub}`}>Communities & Social Groups</p>
+          <div className={`${T.card} mx-4 rounded-2xl p-4 border ${T.line} mb-5`}>
+            <div className="flex items-center justify-between">
+              <div className="pr-4">
+                <p className={`text-sm font-bold ${T.text}`}>Keep Communities from Previous Cities</p>
+                <p className={`text-xs ${T.sub} mt-0.5 leading-tight`}>
+                  Retain your joined groups and discussions from past locations alongside new groups recommended for {profile.city}.
+                </p>
+              </div>
+              <button 
+                onClick={() => setLocationPrefs(prev => ({ ...prev, blendCommunities: !prev.blendCommunities }))}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${locationPrefs.blendCommunities ? "bg-orange-500" : dark ? "bg-zinc-700" : "bg-slate-300"}`}
+              >
+                <span className={`block w-5 h-5 bg-white rounded-full transition-transform ${locationPrefs.blendCommunities ? "translate-x-5" : ""}`} />
+              </button>
+            </div>
+          </div>
+
+          <p className={`mx-4 mb-2 text-xs font-bold uppercase tracking-wider ${T.sub}`}>Feed & Public Stream</p>
+          <div className={`${T.card} mx-4 rounded-2xl p-4 border ${T.line} mb-5`}>
+            <div className="flex items-center justify-between">
+              <div className="pr-4">
+                <p className={`text-sm font-bold ${T.text}`}>Blended Community Feed</p>
+                <p className={`text-xs ${T.sub} mt-0.5 leading-tight`}>
+                  Include posts from your previous city and followed connections, combined with fresh neighborhood discussions from {profile.city}.
+                </p>
+              </div>
+              <button 
+                onClick={() => setLocationPrefs(prev => ({ ...prev, blendFeed: !prev.blendFeed }))}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${locationPrefs.blendFeed ? "bg-orange-500" : dark ? "bg-zinc-700" : "bg-slate-300"}`}
+              >
+                <span className={`block w-5 h-5 bg-white rounded-full transition-transform ${locationPrefs.blendFeed ? "translate-x-5" : ""}`} />
+              </button>
+            </div>
+          </div>
+
+          <p className={`mx-4 mb-2 text-xs font-bold uppercase tracking-wider ${T.sub}`}>Connections & Friends</p>
+          <div className={`${T.card} mx-4 rounded-2xl p-4 border ${T.line} mb-5`}>
+            <div className="flex items-center justify-between">
+              <div className="pr-4">
+                <p className={`text-sm font-bold ${T.text}`}>Preserve All Friends & Direct Chats</p>
+                <p className={`text-xs ${T.sub} mt-0.5 leading-tight`}>
+                  Keep all direct message conversations and friend connections intact across every international move.
+                </p>
+              </div>
+              <button 
+                onClick={() => setLocationPrefs(prev => ({ ...prev, keepFriends: !prev.keepFriends }))}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${locationPrefs.keepFriends ? "bg-orange-500" : dark ? "bg-zinc-700" : "bg-slate-300"}`}
+              >
+                <span className={`block w-5 h-5 bg-white rounded-full transition-transform ${locationPrefs.keepFriends ? "translate-x-5" : ""}`} />
+              </button>
+            </div>
+          </div>
+
+          <p className={`mx-4 mb-2 text-xs font-bold uppercase tracking-wider ${T.sub}`}>Relocation Checklist & Goals</p>
+          <div className={`${T.card} mx-4 rounded-2xl p-4 border ${T.line} mb-5 space-y-2.5`}>
+            <p className={`text-xs ${T.sub}`}>
+              How should your relocation roadmap handle registration, permits, and housing checklists when changing locations?
+            </p>
+            <div className="grid grid-cols-1 gap-2 pt-1">
+              {[
+                { id: "fresh", label: "Fresh City Roadmap", desc: `Generate a new customized checklist for ${profile.city} rules & registration.` },
+                { id: "merge", label: "Merge Checklists", desc: "Keep previous in-progress goals and append new city requirements." },
+                { id: "keep", label: "Keep Existing Checklists Only", desc: "Do not automatically add new city tasks." }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setLocationPrefs(prev => ({ ...prev, roadmapAction: opt.id as any }))}
+                  className={`p-3 rounded-xl text-left border transition-all ${
+                    locationPrefs.roadmapAction === opt.id
+                      ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20 text-orange-900 dark:text-orange-100 shadow-xs"
+                      : `${T.card2} ${T.line} opacity-80`
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold">{opt.label}</span>
+                    {locationPrefs.roadmapAction === opt.id && <Check size={14} className="text-orange-500" />}
+                  </div>
+                  <p className={`text-[11px] mt-0.5 ${T.sub}`}>{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className={`mx-4 mb-2 text-xs font-bold uppercase tracking-wider ${T.sub}`}>Local Services & Daily Trades</p>
+          <div className={`${T.card} mx-4 rounded-2xl p-4 border ${T.line} mb-6`}>
+            <div className="flex items-center justify-between">
+              <div className="pr-4">
+                <p className={`text-sm font-bold ${T.text}`}>Auto-Sync Local Services Hub</p>
+                <p className={`text-xs ${T.sub} mt-0.5 leading-tight`}>
+                  Automatically switch local trades (plumbers, electricians, locksmiths), SIM card guides, and bus facilities to your active city.
+                </p>
+              </div>
+              <button 
+                onClick={() => setLocationPrefs(prev => ({ ...prev, servicesCitySync: !prev.servicesCitySync }))}
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${locationPrefs.servicesCitySync ? "bg-orange-500" : dark ? "bg-zinc-700" : "bg-slate-300"}`}
+              >
+                <span className={`block w-5 h-5 bg-white rounded-full transition-transform ${locationPrefs.servicesCitySync ? "translate-x-5" : ""}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick jump to Edit Profile Location Profiles */}
+          <div className="mx-4">
+            <button
+              onClick={() => { setSettingsSubScreen("root"); setMeScreen("edit"); }}
+              className="w-full py-3 px-4 rounded-2xl bg-orange-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm hover:bg-orange-600 transition-colors"
+            >
+              <Layers size={15} />
+              <span>Switch or Manage Saved Location Profiles in Edit Profile</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     if (settingsSubScreen === "privacy") {
       const [privacySettings, setPrivacySettings] = useState({
@@ -362,6 +499,7 @@ export const MeTab = ({
         <div className={`${T.card} mx-4 rounded-2xl divide-y ${T.line}`}>
           {[
             ["Host country & city", () => setSettingsSubScreen("host")], 
+            ["Location migration & data options", () => setSettingsSubScreen("location-prefs")],
             ["Privacy & data", () => setSettingsSubScreen("privacy")], 
             ["Blocked accounts", () => setSettingsSubScreen("blocked")]
           ].map(([label, action]) => (
@@ -486,8 +624,7 @@ export const MeTab = ({
     const handleLeaveAllGroups = async () => {
       if (confirm("Are you sure you want to leave all joined communities?")) {
         if (user) {
-          const joined = communitiesData.filter((c: any) => c.joined);
-          await Promise.allSettled(joined.map((c: any) => api.groups.leave(c.id)));
+          await api.groups.leaveAll();
         }
         setShowSettings(false);
         setMeScreen("root");
@@ -575,10 +712,21 @@ const EditProfileScreen = () => {
       hostSelect: initialHostSelect,
       citySelect: initialCitySelect,
       customHost: initialHostSelect === "Other" ? profile.host : "",
-      customCity: initialCitySelect === "Other" ? profile.city : ""
+      customCity: initialCitySelect === "Other" ? profile.city : "",
+      languages: profile.languages || [],
+      avatar_url: profile.avatar_url || ""
     });
     const [isUpdating, setIsUpdating] = useState(false);
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [langInput, setLangInput] = useState("");
     
+    const [showAddProfileModal, setShowAddProfileModal] = useState(false);
+    const [newProfileForm, setNewProfileForm] = useState({
+      origin: profile.origin || "India",
+      host: "United Kingdom",
+      city: "London"
+    });
+
     const saveProfile = async () => {
       const finalHost = formData.hostSelect === "Other" ? formData.customHost : formData.hostSelect;
       const finalCity = formData.citySelect === "Other" ? formData.customCity : formData.citySelect;
@@ -586,31 +734,38 @@ const EditProfileScreen = () => {
       if (!finalHost || !finalCity) return;
 
       setIsUpdating(true);
-      if (finalHost !== profile.host || finalCity !== profile.city) {
-        const result = await fetchHostInfo(profile.origin, finalHost, finalCity);
+      if (finalHost !== profile.host || finalCity !== profile.city || formData.origin !== profile.origin) {
+        const result = await applyLocationChange(formData.origin, finalHost, finalCity);
         if (!result.success) {
-          setToastError(result.error || "Failed to update profile.");
+          setToastError(result.error || "Failed to update profile location.");
           setTimeout(() => setToastError(""), 5000);
           setIsUpdating(false);
           return;
         }
       }
 
-      if (user) {
-        try {
-          await api.users.updateMe({
-            fullName: formData.name,
-            origin: formData.origin,
-            host: finalHost,
-            city: finalCity,
-            bio: formData.bio
-          });
-        } catch (e) {
-          console.error("Failed to update profile", e);
-        }
+      let finalAvatarUrl = formData.avatar_url;
+
+      if (avatarFile && user) {
+        const uploaded = await api.uploads.upload(avatarFile);
+        finalAvatarUrl = uploaded.url;
       }
 
-      setProfile({ ...formData, host: finalHost, city: finalCity });
+      if (user) {
+        const { profile: savedProfile } = await api.users.updateMe({
+          fullName: formData.name,
+          origin: formData.origin,
+          host: finalHost,
+          city: finalCity,
+          bio: formData.bio,
+          languages: formData.languages,
+          avatarUrl: finalAvatarUrl || null,
+        });
+        setProfile({ ...profile, ...formData, host: finalHost, city: finalCity, avatar_url: savedProfile.avatarUrl || "" });
+      } else {
+        setProfile({ ...formData, host: finalHost, city: finalCity, avatar_url: finalAvatarUrl });
+      }
+
       setIsUpdating(false);
       setMeScreen("root");
     };
@@ -621,12 +776,45 @@ const EditProfileScreen = () => {
       setFormData({ ...formData, hostSelect: newCountry, citySelect: firstCity, customHost: "", customCity: "" });
     };
 
+    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+        setAvatarFile(e.target.files[0]);
+        setFormData({ ...formData, avatar_url: URL.createObjectURL(e.target.files[0]) });
+      }
+    };
+
+    const addLanguage = () => {
+      if (langInput.trim() && !formData.languages.includes(langInput.trim())) {
+        setFormData({ ...formData, languages: [...formData.languages, langInput.trim()] });
+        setLangInput("");
+      }
+    };
+
+    const removeLanguage = (lang: string) => {
+      setFormData({ ...formData, languages: formData.languages.filter(l => l !== lang) });
+    };
+
     const isSaveDisabled = isUpdating || (formData.hostSelect === "Other" && !formData.customHost) || (formData.citySelect === "Other" && !formData.customCity) || (formData.hostSelect === "Other" && !formData.customCity);
 
     return (
       <div className="pb-24">
         <Header T={T} title="Edit Profile" back={() => setMeScreen("root")} right={<button disabled={isSaveDisabled} onClick={saveProfile} className={`font-bold text-sm px-2 ${isSaveDisabled ? 'text-orange-500/50' : 'text-orange-500'}`}>{isUpdating ? "Saving..." : "Save"}</button>} />
         <div className={`mx-4 space-y-4`}>
+          <div className="flex justify-center mb-6 mt-4">
+            <label className="relative cursor-pointer group block w-24 h-24">
+              {formData.avatar_url ? (
+                <img src={formData.avatar_url} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-white dark:border-zinc-900 shadow-sm" />
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-orange-100 dark:bg-orange-900/30 border-4 border-white dark:border-zinc-900 shadow-sm flex items-center justify-center text-orange-500 font-bold text-3xl">
+                  {formData.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Camera className="text-white" size={24} />
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            </label>
+          </div>
           <div className={`${T.card} p-4 rounded-2xl space-y-4`}>
             <div>
               <label className={`block text-xs font-bold uppercase tracking-wider ${T.sub} mb-1.5`}>Name</label>
@@ -670,6 +858,229 @@ const EditProfileScreen = () => {
                 <input placeholder="Enter City..." value={formData.customCity} onChange={e => setFormData({...formData, customCity: e.target.value})} className={`w-full ${formData.hostSelect !== "Other" ? "mt-2" : ""} ${T.input} rounded-xl px-3 py-2 text-sm outline-none border ${T.line}`} />
               )}
             </div>
+            <div>
+              <label className={`block text-xs font-bold uppercase tracking-wider ${T.sub} mb-1.5`}>Languages Spoken</label>
+              <div className="flex gap-2 mb-2 flex-wrap">
+                {formData.languages.map(lang => (
+                  <span key={lang} className="bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1">
+                    {lang}
+                    <button onClick={() => removeLanguage(lang)} className="hover:text-orange-800 dark:hover:text-orange-200">
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input 
+                  value={langInput} 
+                  onChange={e => setLangInput(e.target.value)} 
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addLanguage(); } }}
+                  placeholder="Add a language..." 
+                  className={`flex-1 ${T.input} rounded-xl px-3 py-2 text-sm outline-none border ${T.line}`} 
+                />
+                <button onClick={addLanguage} className="bg-orange-500 text-white font-bold text-sm px-4 rounded-xl hover:bg-orange-600 transition-colors">
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Saved Location Profiles (Profiles inside Edit Profile page) */}
+          <div className={`${T.card} p-4 rounded-2xl space-y-3.5 border ${T.line}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers size={16} className="text-orange-500" />
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${T.sub}`}>
+                  Location Profiles ({locationProfiles.length})
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddProfileModal(prev => !prev)}
+                className="text-xs font-bold text-orange-500 flex items-center gap-1 hover:underline"
+              >
+                <Plus size={14} />
+                <span>{showAddProfileModal ? "Cancel" : "Add Profile"}</span>
+              </button>
+            </div>
+
+            <p className={`text-xs ${T.sub} leading-relaxed`}>
+              Old location data is saved in separate profiles. Switching to any saved location immediately adapts the entire app (local news, trades, bus networks, and emergency services) to that city.
+            </p>
+
+            {/* Inline Add New Profile form */}
+            {showAddProfileModal && (
+              <div className={`p-3.5 rounded-xl border border-orange-300 dark:border-orange-900/50 bg-orange-50/50 dark:bg-orange-950/20 space-y-3`}>
+                <p className="text-xs font-bold text-orange-600 dark:text-orange-400">Add New Destination Profile</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider ${T.sub} mb-1`}>Destination Country</label>
+                    <select 
+                      value={newProfileForm.host}
+                      onChange={e => {
+                        const h = e.target.value;
+                        const firstC = LOCATIONS[h]?.[0] || "";
+                        setNewProfileForm(f => ({ ...f, host: h, city: firstC }));
+                      }}
+                      className={`w-full ${T.input} rounded-lg px-2.5 py-1.5 text-xs outline-none border ${T.line}`}
+                    >
+                      {Object.keys(LOCATIONS).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider ${T.sub} mb-1`}>City</label>
+                    <select 
+                      value={newProfileForm.city}
+                      onChange={e => setNewProfileForm(f => ({ ...f, city: e.target.value }))}
+                      className={`w-full ${T.input} rounded-lg px-2.5 py-1.5 text-xs outline-none border ${T.line}`}
+                    >
+                      {(LOCATIONS[newProfileForm.host] || []).map(city => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!newProfileForm.city || !newProfileForm.host) return;
+                      setIsUpdating(true);
+                      await applyLocationChange(newProfileForm.origin, newProfileForm.host, newProfileForm.city);
+                      const hSelect = LOCATIONS[newProfileForm.host] ? newProfileForm.host : "Other";
+                      const cSelect = LOCATIONS[hSelect]?.includes(newProfileForm.city) ? newProfileForm.city : "Other";
+                      setFormData(prev => ({
+                        ...prev,
+                        origin: newProfileForm.origin,
+                        hostSelect: hSelect,
+                        citySelect: cSelect,
+                        customHost: hSelect === "Other" ? newProfileForm.host : "",
+                        customCity: cSelect === "Other" ? newProfileForm.city : ""
+                      }));
+                      setShowAddProfileModal(false);
+                      setIsUpdating(false);
+                    }}
+                    className="flex-1 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <RefreshCw size={12} className={isUpdating ? "animate-spin" : ""} />
+                    <span>Add & Switch App Now</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newProf: LocationProfile = {
+                        id: `loc_${Date.now()}`,
+                        origin: newProfileForm.origin,
+                        host: newProfileForm.host,
+                        city: newProfileForm.city,
+                        label: `${newProfileForm.city}, ${newProfileForm.host}`,
+                        createdAt: new Date().toISOString(),
+                        isActive: false
+                      };
+                      setLocationProfiles(prev => [...prev, newProf]);
+                      setShowAddProfileModal(false);
+                    }}
+                    className={`px-3 py-2 rounded-lg ${T.card2} border ${T.line} text-xs font-semibold ${T.text}`}
+                  >
+                    Save Only
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* List of profiles */}
+            <div className="space-y-2">
+              {locationProfiles.map((locProf) => {
+                const isActive = locProf.city.toLowerCase() === profile.city.toLowerCase() && locProf.host.toLowerCase() === profile.host.toLowerCase();
+                return (
+                  <div
+                    key={locProf.id}
+                    className={`p-3 rounded-xl border transition-all ${
+                      isActive 
+                        ? "border-orange-500 bg-orange-500/10 shadow-xs" 
+                        : `${T.card2} ${T.line}`
+                    } flex items-center justify-between gap-2`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <MapPin size={13} className={isActive ? "text-orange-500" : T.sub} />
+                        <span className={`text-xs font-bold truncate ${T.text}`}>
+                          {locProf.city}, {locProf.host}
+                        </span>
+                        {isActive && (
+                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-500 text-white shrink-0">
+                            Active Now
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-[10px] ${T.sub} mt-0.5`}>
+                        Origin: {locProf.origin} · Saved profile
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!isActive && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setIsUpdating(true);
+                            await applyLocationChange(locProf.origin, locProf.host, locProf.city);
+                            const hSelect = LOCATIONS[locProf.host] ? locProf.host : "Other";
+                            const cSelect = LOCATIONS[hSelect]?.includes(locProf.city) ? locProf.city : "Other";
+                            setFormData(prev => ({
+                              ...prev,
+                              origin: locProf.origin,
+                              hostSelect: hSelect,
+                              citySelect: cSelect,
+                              customHost: hSelect === "Other" ? locProf.host : "",
+                              customCity: cSelect === "Other" ? locProf.city : ""
+                            }));
+                            setIsUpdating(false);
+                          }}
+                          disabled={isUpdating}
+                          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white shadow-xs flex items-center gap-1 transition-colors"
+                        >
+                          <RefreshCw size={11} className={isUpdating ? "animate-spin" : ""} />
+                          <span>Switch</span>
+                        </button>
+                      )}
+
+                      {!isActive && locationProfiles.length > 1 && (
+                        <button
+                          type="button"
+                          title="Remove profile"
+                          onClick={() => {
+                            setLocationProfiles(prev => prev.filter(p => p.id !== locProf.id));
+                          }}
+                          className={`p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 ${T.sub} transition-colors`}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick Link to Settings: Location migration preferences */}
+            <button
+              type="button"
+              onClick={() => {
+                setMeScreen("settings");
+                setSettingsSubScreen("location-prefs");
+              }}
+              className={`w-full py-2.5 px-3 rounded-xl ${T.card2} border ${T.line} text-xs font-semibold ${T.text} flex items-center justify-between hover:bg-orange-500/10 transition-colors group`}
+            >
+              <div className="flex items-center gap-2">
+                <Sliders size={14} className="text-orange-500" />
+                <span>Configure what data is kept when changing location</span>
+              </div>
+              <ChevronRight size={14} className={`${T.sub} group-hover:translate-x-0.5 transition-transform`} />
+            </button>
           </div>
         </div>
       </div>
@@ -723,8 +1134,8 @@ const EditProfileScreen = () => {
   
   return (
     <div className="pb-24">
-      <Header T={T} title="Me" />
-      <div className={`${T.card} mx-4 rounded-2xl p-5 cardin`}>
+      <Header T={T} hideOnDesktop={true} title="Me" />
+      <div className={`${T.card} mx-4 lg:mx-0 rounded-2xl p-5 cardin border ${T.line}`}>
         <div className="flex items-center gap-4">
           <Avatar name={profile.name} size={14} ring />
           <div>
@@ -740,20 +1151,21 @@ const EditProfileScreen = () => {
           <button onClick={() => setMeScreen("editProfile")} className={`ml-auto text-xs font-semibold px-3 py-1.5 rounded-full ${T.card2} ${T.text}`}>Edit profile</button>
         </div>
       </div>
-      <div className={`${T.card} mx-4 mt-4 rounded-2xl divide-y ${T.line}`}>
+      <div className={`${T.card} mx-4 lg:mx-0 mt-4 rounded-2xl divide-y ${T.line} border ${T.line}`}>
         {[
-          [Newspaper, "Local news", "Daily flash cards for Berlin", () => setMeScreen("news")],
-          [Users, "My communities", "3 joined", () => setMeScreen("communities")],
+          [Sparkles, "App Overview & Highlights", "Explore features & landing page", onOpenLanding || (() => setMeScreen("about"))],
+          [Newspaper, "Local news", `Daily flash cards for ${profile.city}`, () => setMeScreen("news")],
+          [Users, "My communities", "Explore & manage groups", () => setMeScreen("communities")],
           [Bookmark, "Saved posts & guides", "", () => setMeScreen("saved")],
           [Settings, "Settings", "Language, theme, notifications", () => setMeScreen("settings")],
           [Info, "About Meet Peanut", "v0.9.2", () => setMeScreen("about")],
           [LogOut, "Log Out", "", handleLogout]
         ].map(([Icon, label, sub, fn]: any) => (
-          <button key={label as string} onClick={fn} className="flex items-center gap-3 w-full p-4 text-left">
-            <div className="w-9 h-9 rounded-lg bg-orange-500/10 text-orange-700 flex items-center justify-center"><Icon size={17} /></div>
-            <div className="flex-1">
-              <p className={`text-sm font-semibold ${T.text}`}>{label}</p>
-              {sub && <p className={`text-xs ${T.sub}`}>{sub}</p>}
+          <button key={label as string} onClick={fn} className="flex items-center gap-3 w-full p-4 text-left hover:bg-orange-50/50 dark:hover:bg-neutral-800/50 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-orange-500/10 text-orange-700 dark:text-orange-400 flex items-center justify-center shrink-0"><Icon size={17} /></div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${T.text} truncate`}>{label}</p>
+              {sub && <p className={`text-xs ${T.sub} truncate`}>{sub}</p>}
             </div>
             <ChevronRight size={16} className={T.sub} />
           </button>

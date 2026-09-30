@@ -28,7 +28,7 @@ on:
       ref:
         description: Branch or tag to deploy
         required: false
-        default: main
+        default: dev
 
 permissions:
   id-token: write

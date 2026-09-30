@@ -12,6 +12,7 @@ import { LikeButton } from "./LikeButton";
 import { CommentSection } from "./CommentSection";
 import { CommunityRolesModal, CommunityInviteModal } from "./CommunityModals";
 import { Theme, Profile } from "../types";
+import { DUMMY_EVENTS, DUMMY_PEOPLE } from "../constants";
 import { api } from "../api";
 import { wsClient } from "../ws";
 
@@ -105,7 +106,7 @@ export const UserView = ({ user, onClose, T, onGroupClick, groups, onStartChat }
 
       <div className="px-4 py-8 flex flex-col items-center border-b border-orange-100 dark:border-zinc-800">
         <div className="w-24 h-24 mb-4">
-          <Avatar name={user.name} />
+          <Avatar name={user.name} url={user.avatar_url} size={24} />
         </div>
         <h1 className={`text-2xl font-bold ${T.text}`}>{user.name}</h1>
         <p className={`text-sm ${T.sub} mt-1 flex items-center gap-1.5`}>
@@ -146,6 +147,19 @@ export const UserView = ({ user, onClose, T, onGroupClick, groups, onStartChat }
           </p>
         </div>
 
+        {user.languages && user.languages.length > 0 && (
+          <div>
+            <p className={`text-xs font-bold uppercase tracking-wider ${T.sub} mb-3`}>Languages Spoken</p>
+            <div className="flex flex-wrap gap-2">
+              {user.languages.map((lang: string) => (
+                <span key={lang} className="bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 px-3 py-1.5 rounded-full text-xs font-bold">
+                  {lang}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <p className={`text-xs font-bold uppercase tracking-wider ${T.sub} mb-3`}>Interests & Topics</p>
           <div className="flex flex-wrap gap-2">
@@ -185,6 +199,7 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
   const [isRsvping, setIsRsvping] = useState(false);
   const [showAttendeesModal, setShowAttendeesModal] = useState(false);
   const [attendeeSearch, setAttendeeSearch] = useState("");
+  const [attendeeList, setAttendeeList] = useState<any[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -199,20 +214,22 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
       if (joined) {
         await api.events.cancelRsvp(selectedEvent.id);
         setJoined(false);
-        setAttendees((a: number) => Math.max(0, a - 1));
+        setAttendees((count: number) => Math.max(0, count - 1));
         onRSVP && onRSVP(selectedEvent.id, false);
         showToast("RSVP cancelled");
       } else {
         await api.events.rsvp(selectedEvent.id);
         setJoined(true);
-        setAttendees((a: number) => a + 1);
+        setAttendees((count: number) => count + 1);
         onRSVP && onRSVP(selectedEvent.id, true);
         showToast("RSVP confirmed! See you there 🎉");
       }
-    } catch (e) {
-      console.error("Failed to RSVP", e);
+    } catch (error) {
+      console.error("Failed to update RSVP", error);
+      showToast("Could not update your RSVP");
+    } finally {
+      setIsRsvping(false);
     }
-    setIsRsvping(false);
   };
 
   const handleOpenMap = () => {
@@ -229,7 +246,23 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
     showToast("Opening calendar...");
   };
 
-  const fullAttendeesList = selectedEvent.attendeesList || [];
+  const fullAttendeesList = attendeeList;
+
+  const openAttendees = async () => {
+    setShowAttendeesModal(true);
+    try {
+      const { attendees: users } = await api.events.attendees(selectedEvent.id);
+      setAttendeeList(users.map((attendee: any) => ({
+        user_id: attendee.id,
+        user_name: attendee.fullName,
+        origin: attendee.origin,
+        city: attendee.city,
+      })));
+    } catch (error) {
+      console.error("Failed to load event attendees", error);
+      setAttendeeList([]);
+    }
+  };
 
   const filteredAttendees = fullAttendeesList.filter((a: any) => 
     (a.user_name || "").toLowerCase().includes(attendeeSearch.toLowerCase())
@@ -395,7 +428,7 @@ export const EventView = ({ event: selectedEvent, onClose, T, onUserClick, user,
           <div className="flex items-center justify-between mb-3">
             <p className={`text-xs font-bold uppercase tracking-wider ${T.sub}`}>Attendees ({attendees})</p>
             <button 
-              onClick={() => setShowAttendeesModal(true)} 
+              onClick={openAttendees} 
               className="text-xs font-semibold text-orange-600 hover:underline"
             >
               See all {attendees} →
@@ -517,46 +550,63 @@ export const GroupView = ({
   };
 
   useEffect(() => {
-    fetchUpdates();
-    fetchMembers();
-    return wsClient.subscribe('group:update', (payload: any) => {
-      if (payload?.groupId === group.id) fetchUpdates();
+    void fetchUpdates();
+    void fetchMembers();
+    return wsClient.subscribe("group:update", (update: any) => {
+      if (update.groupId === group.id) {
+        void fetchUpdates();
+        void fetchMembers();
+      }
     });
   }, [group.id]);
 
   const fetchMembers = async () => {
     try {
-      const { group: fullGroup } = await api.groups.get(group.id);
-      const members = fullGroup.members || [];
-      setActualMembers(members.map((m: any) => ({
-        id: m.id,
-        name: m.fullName || "Community Member",
-        role: m.role === "admin" ? "Admin" : (m.id === creatorId ? "Creator" : "Member")
-      })));
-      setMembersCount(members.length);
-    } catch (e) {
-      console.error("Failed to load members", e);
-      setActualMembers([]);
+      const { group: groupDetails } = await api.groups.get(group.id);
+      if (groupDetails.members?.length) {
+        setActualMembers(groupDetails.members.map((member: any) => ({
+          id: member.id,
+          name: member.fullName || "Community Member",
+          role: member.role,
+        })));
+        setMembersCount(groupDetails.membersCount || groupDetails.members.length);
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to load group members", error);
     }
+    setActualMembers([{ id: creatorId, name: creatorName, role: "Creator" }]);
   };
 
   const fetchUpdates = async () => {
     try {
       const { updates } = await api.groups.updates(group.id);
-      setPosts((updates || []).map((u: any) => ({
-        id: u.id,
-        author_id: u.author?.id,
-        user: { name: u.author?.fullName || "Member" },
-        text: u.content,
-        time: new Date(u.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        likes: 0,
-        liked: false,
-        comments: 0
-      })));
-    } catch (e) {
-      console.error("Failed to load group updates", e);
-      setPosts([]);
+      if (updates.length) {
+        setPosts(updates.map((update: any) => ({
+          id: update.id,
+          author_id: update.authorId,
+          user: { name: update.author?.fullName || "Member" },
+          text: update.content,
+          time: new Date(update.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+          likes: 0,
+          liked: false,
+          comments: 0,
+        })));
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to load group updates", error);
     }
+    setPosts([{
+      id: `welcome_${group.id}`,
+      author_id: creatorId,
+      user: { name: creatorName },
+      text: `Welcome everyone to ${group.name}! 🎉 Feel free to introduce yourself, share tips, or suggest a weekend meetup.`,
+      time: "Pinned",
+      likes: 5,
+      liked: false,
+      comments: 1,
+    }]);
   };
 
   // Promote Member to Admin (Multi-Admins Capability)
@@ -627,28 +677,23 @@ export const GroupView = ({
     onToggleJoinGroup && onToggleJoinGroup(group.id, nextJoined);
 
     try {
-      if (nextJoined) {
-        await api.groups.join(group.id);
-        fetchMembers();
-        showToast(`Joined ${group.name}!`);
-      } else {
-        await api.groups.leave(group.id);
-        fetchMembers();
-        showToast(`Left ${group.name}`);
-      }
-    } catch (e) {
-      console.error("Failed to update membership", e);
+      if (nextJoined) await api.groups.join(group.id);
+      else await api.groups.leave(group.id);
+      fetchMembers();
+      showToast(nextJoined ? `Joined ${group.name}!` : `Left ${group.name}`);
+    } catch (error) {
+      setIsJoined(!nextJoined);
+      setMembersCount((count) => Math.max(0, count + (nextJoined ? -1 : 1)));
+      onToggleJoinGroup && onToggleJoinGroup(group.id, !nextJoined);
+      console.error("Failed to update group membership", error);
+      showToast("Could not update group membership");
     }
   };
 
   const handleLeaveGroup = async () => {
     if (confirm(`Are you sure you want to leave ${group.name}?`)) {
       if (user) {
-        try {
-          await api.groups.leave(group.id);
-        } catch (e) {
-          console.error("Failed to leave group", e);
-        }
+        await api.groups.leave(group.id);
       }
       setIsJoined(false);
       setMembersCount(Math.max(0, membersCount - 1));
@@ -674,11 +719,20 @@ export const GroupView = ({
       await api.groups.postUpdate(group.id, textToSubmit);
       fetchUpdates();
       showToast("Post shared with the group!");
-    } catch (e) {
+    } catch {
       setNewUpdateText(textToSubmit);
       showToast("Could not publish post. Please try again.");
     }
     setIsPosting(false);
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (confirm("Delete this post from the group?")) {
+      setPosts(prev => prev.filter(p => p.id !== postId));
+      setActivePostMenu(null);
+      await api.groups.removeUpdate(group.id, postId);
+      showToast("Post removed");
+    }
   };
 
   const handleCopyPostLink = (text: string) => {
@@ -1047,6 +1101,7 @@ export const GroupView = ({
               </div>
             ) : (
               sortedPosts.map((p) => {
+                const isAuthor = user && (p.author_id === user.id || p.user?.name === profile?.name);
                 const canModerate = isCurrentUserAdmin || isCurrentUserCreator;
                 const isPostCreator = p.author_id === creatorId || (p.user?.name && p.user.name.toLowerCase() === creatorName.toLowerCase());
                 const isPostAdmin = !isPostCreator && (adminIds.includes(p.author_id) || (p.user?.name && (adminIds.includes(p.user.name) || adminIds.includes(p.user.name.toLowerCase()))));
@@ -1117,6 +1172,14 @@ export const GroupView = ({
                                 className={`text-left px-2.5 py-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-2`}
                               >
                                 <Pin size={13} /> {isPinned ? "Unpin Post" : "Pin Announcement"}
+                              </button>
+                            )}
+                            {(isAuthor || canModerate) && (
+                              <button 
+                                onClick={() => handleDeletePost(p.id)}
+                                className="text-left px-2.5 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl flex items-center gap-2"
+                              >
+                                <Trash2 size={13} /> Delete Post
                               </button>
                             )}
                           </div>
@@ -1445,8 +1508,8 @@ export const CommunityTab = ({
   directMessages
 }: CommunityTabProps) => {
   const [data, setData] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [people, setPeople] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>(DUMMY_EVENTS);
+  const [people, setPeople] = useState<any[]>(DUMMY_PEOPLE);
   const [invites, setInvites] = useState<any[]>([]);
   
   // Search & Filtering States
@@ -1462,10 +1525,14 @@ export const CommunityTab = ({
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [groupToInvite, setGroupToInvite] = useState<any>(null);
+  const [inviteSearch, setInviteSearch] = useState("");
+  const [inviteResults, setInviteResults] = useState<any[]>([]);
+  const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
 
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
   const [showAllYourGroupsModal, setShowAllYourGroupsModal] = useState(false);
+  const [showRadarModal, setShowRadarModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Group Creation States
@@ -1498,13 +1565,54 @@ export const CommunityTab = ({
     fetchInvites();
   }, [user]);
 
+  useEffect(() => {
+    if (inviteSearch.trim().length > 1) {
+      const timer = setTimeout(() => {
+        searchUsers();
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      setInviteResults([]);
+    }
+  }, [inviteSearch]);
+
+  const searchUsers = async () => {
+    try {
+      const { users } = await api.users.search(inviteSearch);
+      setInviteResults(users.slice(0, 5).map((candidate: any) => ({ ...candidate, full_name: candidate.fullName })));
+    } catch (error) {
+      console.error("Failed to search users", error);
+      setInviteResults([]);
+    }
+  };
+
+  const sendInvite = async (inviteeId: string) => {
+    if (!user || !groupToInvite) return;
+    setInvitingUserId(inviteeId);
+    
+    try {
+      await api.groups.invite(groupToInvite.id, inviteeId);
+      showToast(`Invitation sent for ${groupToInvite.name}!`);
+      setIsInviteModalOpen(false);
+      setInviteSearch("");
+    } catch (error: any) {
+      showToast(error.message || "Could not send invitation");
+    }
+    setInvitingUserId(null);
+  };
+
   const fetchInvites = async () => {
     if (!user) return;
     try {
-      const { invites: invs } = await api.groups.receivedInvites();
-      setInvites(invs);
-    } catch (e) {
-      console.error("Failed to load invites", e);
+      const { invites } = await api.groups.receivedInvites();
+      setInvites(invites.map((invite: any) => ({
+        ...invite,
+        group_id: invite.groupId,
+        groups: { ...invite.group, image: invite.group.emoji },
+        profiles: { ...invite.inviter, full_name: invite.inviter.fullName },
+      })));
+    } catch (error) {
+      console.error("Failed to load group invitations", error);
     }
   };
 
@@ -1512,73 +1620,63 @@ export const CommunityTab = ({
     try {
       await api.groups.respondInvite(invite.id, action === "accepted" ? "ACCEPTED" : "DECLINED");
       if (action === "accepted") {
-        showToast(`Joined ${invite.group?.name}!`);
+        showToast(`Joined ${invite.groups?.name}!`);
         fetchCommunities();
         onRefreshGroups && onRefreshGroups();
       }
-    } catch (e) {
-      console.error("Failed to respond to invite", e);
+    } catch (error) {
+      console.error("Failed to respond to group invitation", error);
     }
-    fetchInvites();
+    await fetchInvites();
   };
 
   const fetchCommunities = async () => {
     try {
       const { groups } = await api.groups.list();
-      if (groups && groups.length > 0) {
-        setData(groups.map((g: any) => ({
-          id: g.id,
-          name: g.name,
-          desc: g.description,
-          category: g.category || "General",
-          emoji: g.emoji || "🏘️",
-          members: g.membersCount || 0,
-          joined: !!g.joined
-        })));
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to load communities", e);
+      setData(groups.map((group: any) => ({
+        id: group.id,
+        name: group.name,
+        desc: group.description,
+        category: group.category || "General",
+        emoji: group.emoji || "🏘️",
+        members: group.membersCount || 0,
+        joined: !!group.joined,
+      })));
+    } catch (error) {
+      console.error("Failed to load communities", error);
     }
-    setData([]);
   };
 
   const fetchEvents = async () => {
     try {
-      const { events: evs } = await api.events.list();
-      if (evs && evs.length > 0) {
-        setEvents(evs.map((e: any) => ({
-          ...e,
-          attendees: e.attendeesCount,
-          attendeesList: [],
-          joined: !!e.attending
-        })));
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to load events", e);
+      const { events } = await api.events.list();
+      setEvents(events.map((event: any) => ({
+        ...event,
+        attendees: event.attendeesCount,
+        attendeesList: [],
+        joined: !!event.attending,
+      })));
+    } catch (error) {
+      console.error("Failed to load events", error);
     }
-    setEvents([]);
   };
 
   const fetchPeople = async () => {
     try {
-      const { users: pros } = await api.users.search("");
-      if (pros && pros.length > 0) {
-        setPeople(pros.map((p: any) => ({
-          id: p.id,
-          name: p.fullName || p.handle || "Newcomer",
-          origin: p.origin || "International",
-          city: profile.city || "Berlin",
-          bio: p.bio || "Enthusiastic expat exploring Germany.",
-          avatar: (p.fullName || p.handle || "U").substring(0, 2).toUpperCase()
-        })));
-        return;
-      }
-    } catch (e) {
-      console.error("Failed to load people", e);
+      const { users } = await api.users.search("");
+      setPeople(users.map((candidate: any) => ({
+        id: candidate.id,
+        name: candidate.fullName || candidate.handle || "Newcomer",
+        origin: candidate.origin || "International",
+        city: candidate.city || profile.city || "Berlin",
+        bio: candidate.bio || "Enthusiastic expat exploring Germany.",
+        avatar: (candidate.fullName || candidate.handle || "U").substring(0, 2).toUpperCase(),
+        avatar_url: candidate.avatarUrl,
+        languages: candidate.languages || [],
+      })));
+    } catch (error) {
+      console.error("Failed to load people", error);
     }
-    setPeople([]);
   };
 
   const handleJoinGroup = async (groupId: string) => {
@@ -1589,12 +1687,13 @@ export const CommunityTab = ({
     // Optimistic UI update
     setData(prev => prev.map(g => g.id === groupId ? { ...g, joined: true, members: g.members + 1 } : g));
     showToast("Joined group!");
-
+    
     try {
       await api.groups.join(groupId);
       onRefreshGroups && onRefreshGroups();
-    } catch (e) {
-      console.error("Failed to join group", e);
+    } catch (error) {
+      console.error("Failed to join group", error);
+      setData((previous) => previous.map((group) => group.id === groupId ? { ...group, joined: false, members: Math.max(0, group.members - 1) } : group));
     }
   };
 
@@ -1611,15 +1710,15 @@ export const CommunityTab = ({
     }
     setIsCreating(true);
     setCreateError("");
-
+    
     try {
       const { group: newGroup } = await api.groups.create({
         name: newGroupName.trim(),
         description: newGroupDesc.trim(),
         category: newGroupCat,
-        emoji: newGroupEmoji
+        emoji: newGroupEmoji,
       });
-
+      
       // Update local state instantly
       const createdObj = {
         id: newGroup.id,
@@ -1631,7 +1730,7 @@ export const CommunityTab = ({
         joined: true
       };
       setData(prev => [createdObj, ...prev]);
-
+      
       setIsCreateGroupOpen(false);
       setNewGroupName("");
       setNewGroupDesc("");
@@ -1639,10 +1738,11 @@ export const CommunityTab = ({
       setNewGroupEmoji("🏘️");
       showToast(`Group "${newGroup.name}" created!`);
       onRefreshGroups && onRefreshGroups();
-    } catch (e: any) {
-      setCreateError(e.message || "Failed to create group");
+    } catch (error: any) {
+      setCreateError(error.message || "Could not create group");
+    } finally {
+      setIsCreating(false);
     }
-    setIsCreating(false);
   };
 
   const handleCreateEvent = async () => {
@@ -1654,36 +1754,29 @@ export const CommunityTab = ({
     setIsCreating(true);
     setCreateError("");
 
-    // Compute an actual Date for the API, and a readable label for display
-    let isoDate = new Date().toISOString();
-    let formattedDate = "This Weekend · 18:00";
-    if (newEventDateInput) {
-      const d = new Date(`${newEventDateInput}T${newEventTimeInput || '18:00'}`);
-      if (!isNaN(d.getTime())) {
-        isoDate = d.toISOString();
-        formattedDate = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ` · ${newEventTimeInput || '18:00'}`;
-      }
-    }
-
+    const eventDate = newEventDateInput
+      ? new Date(`${newEventDateInput}T${newEventTimeInput || "18:00"}`)
+      : new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
     try {
       const { event: newEvent } = await api.events.create({
         title: newEventName.trim(),
         description: newEventDesc.trim(),
         image: newEventEmoji,
-        date: isoDate,
-        location: newEventLocation.trim()
+        date: eventDate.toISOString(),
+        location: newEventLocation.trim(),
       });
       await api.events.rsvp(newEvent.id);
-
+      
       const createdEventObj = {
         ...newEvent,
-        date: formattedDate,
         joined: true,
         attendees: 1,
-        attendeesList: [{ user_id: user.id, user_name: profile.name }]
+        attendeesCount: 1,
+        attendeesList: [],
+        attending: true,
       };
       setEvents(prev => [createdEventObj, ...prev]);
-
+      
       setIsCreateEventOpen(false);
       setNewEventName("");
       setNewEventDesc("");
@@ -1691,10 +1784,11 @@ export const CommunityTab = ({
       setNewEventDateInput("");
       setNewEventEmoji("📅");
       showToast(`Event "${newEvent.title}" published!`);
-    } catch (e: any) {
-      setCreateError(e.message || "Failed to create event");
+    } catch (error: any) {
+      setCreateError(error.message || "Could not create event");
+    } finally {
+      setIsCreating(false);
     }
-    setIsCreating(false);
   };
 
   // Filtered Lists Logic
@@ -1793,6 +1887,7 @@ export const CommunityTab = ({
       {/* Main Header */}
       <Header 
         T={T} 
+        hideOnDesktop={true}
         title="Community" 
         right={
           <div className="flex gap-1.5">
@@ -1870,7 +1965,7 @@ export const CommunityTab = ({
 
       {/* GROUPS TAB */}
       {activeCommunityTab === "groups" && (
-        <div className="mx-4 space-y-3.5 cardin">
+        <div className="mx-4 lg:mx-0 space-y-3.5 cardin">
           {/* Category Filter Chips */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {["All", "Social", "Housing", "Professional", "Hobby", "Support"].map(cat => (
@@ -1897,11 +1992,11 @@ export const CommunityTab = ({
                   <div key={inv.id} className={`${T.card} rounded-2xl p-3.5 shadow-sm border-2 border-orange-200 dark:border-orange-500/30`}>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-500/10 flex items-center justify-center text-xl shrink-0">
-                        {inv.group?.emoji || "🏘️"}
+                        {inv.groups?.image || "🏘️"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-bold ${T.text} truncate`}>{inv.group?.name}</p>
-                        <p className={`text-[11px] ${T.sub}`}>Invited by {inv.inviter?.fullName || "Community member"}</p>
+                        <p className={`text-xs font-bold ${T.text} truncate`}>{inv.groups?.name}</p>
+                        <p className={`text-[11px] ${T.sub}`}>Invited by {inv.profiles?.full_name || "Community member"}</p>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3">
@@ -1969,28 +2064,30 @@ export const CommunityTab = ({
             {filteredGroups.filter(c => !c.joined).length === 0 ? (
               <p className={`text-xs text-center py-6 ${T.sub}`}>No matching groups found.</p>
             ) : (
-              filteredGroups.filter(c => !c.joined).map(c => (
-                <div 
-                  key={c.id || c.name} 
-                  onClick={() => setSelectedGroup(c)} 
-                  className={`${T.card} rounded-2xl p-3.5 mb-2 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
-                >
-                  <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-2xl shrink-0">{c.emoji}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-bold ${T.text} truncate`}>{c.name}</p>
-                    <p className={`text-[11px] ${T.sub} truncate`}>{c.desc || `${c.members} members · ${c.category || "Community"}`}</p>
-                  </div>
-                  <button 
-                    className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shrink-0 shadow-sm active:scale-95 transition-all" 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      handleJoinGroup(c.id); 
-                    }}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {filteredGroups.filter(c => !c.joined).map(c => (
+                  <div 
+                    key={c.id || c.name} 
+                    onClick={() => setSelectedGroup(c)} 
+                    className={`${T.card} rounded-2xl p-3.5 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
                   >
-                    Join
-                  </button>
-                </div>
-              ))
+                    <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-zinc-800 flex items-center justify-center text-2xl shrink-0">{c.emoji}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-bold ${T.text} truncate`}>{c.name}</p>
+                      <p className={`text-[11px] ${T.sub} truncate`}>{c.desc || `${c.members} members · ${c.category || "Community"}`}</p>
+                    </div>
+                    <button 
+                      className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shrink-0 shadow-sm active:scale-95 transition-all" 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        handleJoinGroup(c.id); 
+                      }}
+                    >
+                      Join
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -1998,7 +2095,7 @@ export const CommunityTab = ({
 
       {/* EVENTS TAB */}
       {activeCommunityTab === "events" && (
-        <div className="mx-4 space-y-3.5 cardin">
+        <div className="mx-4 lg:mx-0 space-y-3.5 cardin">
           {/* Events Filter Chips */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {["All", "Upcoming", "Attending", "This Week"].map(filter => (
@@ -2025,48 +2122,67 @@ export const CommunityTab = ({
               <p className={`text-xs ${T.sub} mt-1`}>Create an event and bring people together!</p>
             </div>
           ) : (
-            filteredEvents.map(e => (
-              <div 
-                key={e.id} 
-                onClick={() => setSelectedEvent(e)} 
-                className={`${T.card} rounded-2xl overflow-hidden shadow-sm flex cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
-              >
-                <div className="w-24 bg-orange-100 dark:bg-zinc-900 flex items-center justify-center text-4xl shrink-0">
-                  {e.image || "📅"}
-                </div>
-                <div className="p-3.5 flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-orange-600 mb-0.5">{e.date}</p>
-                    {e.joined && (
-                      <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full">
-                        Going
-                      </span>
-                    )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredEvents.map(e => (
+                <div 
+                  key={e.id} 
+                  onClick={() => setSelectedEvent(e)} 
+                  className={`${T.card} rounded-2xl overflow-hidden shadow-sm flex cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
+                >
+                  <div className="w-24 bg-orange-100 dark:bg-zinc-900 flex items-center justify-center text-4xl shrink-0">
+                    {e.image || "📅"}
                   </div>
-                  <p className={`text-xs font-bold ${T.text} truncate`}>{e.title}</p>
-                  <p className={`text-[11px] ${T.sub} flex items-center gap-1 mt-1 truncate`}>
-                    <MapPin size={11} className="shrink-0 text-orange-500" /> {e.location}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2.5">
-                    <div className="flex -space-x-1.5">
-                      {[1, 2, 3].map(i => (
-                        <div key={i} className="w-5 h-5 rounded-full border-2 border-white dark:border-zinc-900 bg-orange-400 text-[8px] text-white flex items-center justify-center font-bold">
-                          {i}
-                        </div>
-                      ))}
+                  <div className="p-3.5 flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold text-orange-600 mb-0.5">{e.date}</p>
+                      {e.joined && (
+                        <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full">
+                          Going
+                        </span>
+                      )}
                     </div>
-                    <p className={`text-[10px] ${T.sub}`}>+{e.attendees || 0} attending</p>
+                    <p className={`text-xs font-bold ${T.text} truncate`}>{e.title}</p>
+                    <p className={`text-[11px] ${T.sub} flex items-center gap-1 mt-1 truncate`}>
+                      <MapPin size={11} className="shrink-0 text-orange-500" /> {e.location}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <div className="flex -space-x-1.5">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="w-5 h-5 rounded-full border-2 border-white dark:border-zinc-900 bg-orange-400 text-[8px] text-white flex items-center justify-center font-bold">
+                            {i}
+                          </div>
+                        ))}
+                      </div>
+                      <p className={`text-[10px] ${T.sub}`}>+{e.attendees || 0} attending</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
       )}
 
       {/* PEOPLE TAB */}
       {activeCommunityTab === "people" && (
-        <div className="mx-4 space-y-3.5 cardin">
+        <div className="mx-4 lg:mx-0 space-y-3.5 cardin">
+          {/* Expats Nearby Radar Card */}
+          <div className={`p-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md flex items-center gap-3.5`}>
+            <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white shrink-0">
+              <Compass size={22} className="animate-spin-slow" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white leading-tight">Expats in {profile.city}</p>
+              <p className="text-xs text-orange-100 mt-0.5 truncate">Discover newcomers & neighbors nearby</p>
+            </div>
+            <button 
+              onClick={() => setShowRadarModal(true)}
+              className="bg-white text-orange-600 hover:bg-orange-50 text-xs font-bold px-3.5 py-1.5 rounded-full shadow-sm active:scale-95 transition-all shrink-0"
+            >
+              Radar
+            </button>
+          </div>
+
           {/* People Filter Chips */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {["All", `In ${profile.city}`, `From ${profile.origin}`].map(filter => (
@@ -2089,31 +2205,33 @@ export const CommunityTab = ({
           {filteredPeople.length === 0 ? (
             <p className={`text-xs text-center py-6 ${T.sub}`}>No matching members found.</p>
           ) : (
-            filteredPeople.map(p => (
-              <div 
-                key={p.id} 
-                onClick={() => setSelectedUser(p)} 
-                className={`${T.card} rounded-2xl p-3.5 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
-              >
-                <Avatar name={p.name} size={10} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-bold ${T.text} truncate`}>
-                    {p.name} <span className="text-[11px] font-normal text-orange-600 dark:text-orange-400">from {p.origin}</span>
-                  </p>
-                  <p className={`text-[11px] ${T.sub} line-clamp-1 mt-0.5`}>{p.bio}</p>
-                </div>
-                <button 
-                  className={`p-2 rounded-full ${T.card2} text-orange-500 hover:bg-orange-500 hover:text-white transition-colors shrink-0`} 
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    onStartChat ? onStartChat(p.id, p.name) : setSelectedUser(p); 
-                  }}
-                  title="Direct message"
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredPeople.map(p => (
+                <div 
+                  key={p.id} 
+                  onClick={() => setSelectedUser(p)} 
+                  className={`${T.card} rounded-2xl p-3.5 flex items-center gap-3 shadow-sm cursor-pointer border border-transparent hover:border-orange-200 dark:hover:border-zinc-800 transition-all`}
                 >
-                  <MessageCircle size={16} />
-                </button>
-              </div>
-            ))
+                  <Avatar name={p.name} url={p.avatar_url} size={10} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${T.text} truncate`}>
+                      {p.name} <span className="text-[11px] font-normal text-orange-600 dark:text-orange-400">from {p.origin}</span>
+                    </p>
+                    <p className={`text-[11px] ${T.sub} line-clamp-1 mt-0.5`}>{p.bio}</p>
+                  </div>
+                  <button 
+                    className={`p-2 rounded-full ${T.card2} text-orange-500 hover:bg-orange-500 hover:text-white transition-colors shrink-0`} 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onStartChat ? onStartChat(p.id, p.name) : setSelectedUser(p); 
+                    }}
+                    title="Direct message"
+                  >
+                    <MessageCircle size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -2142,6 +2260,60 @@ export const CommunityTab = ({
                     <p className={`text-[10px] ${T.sub}`}>{c.members} members</p>
                   </div>
                   <ChevronRight size={15} className={T.sub} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Neighborhood Radar */}
+      {showRadarModal && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-sm ${T.bg} rounded-3xl overflow-hidden cardin flex flex-col max-h-[85vh]`}>
+            <div className="p-4 border-b border-orange-100 dark:border-zinc-800 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Compass size={18} className="text-orange-500" />
+                <h3 className={`text-base font-bold ${T.text}`}>{profile.city} Community Radar</h3>
+              </div>
+              <button onClick={() => setShowRadarModal(false)} className={T.sub}><X size={20} /></button>
+            </div>
+            <div className="p-4 bg-orange-500/10 dark:bg-zinc-900 flex items-center justify-center py-6 border-b border-orange-100 dark:border-zinc-800">
+              <div className="relative w-28 h-28 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border border-orange-500/20 animate-ping" />
+                <div className="absolute inset-3 rounded-full border border-orange-500/40" />
+                <div className="absolute inset-7 rounded-full border border-orange-500/60" />
+                <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs shadow-md">
+                  You
+                </div>
+              </div>
+            </div>
+            <div className="p-4 space-y-2.5 overflow-y-auto flex-1 no-scrollbar">
+              <p className={`text-[11px] font-bold uppercase tracking-wider ${T.sub} mb-1`}>Active nearby</p>
+              {[
+                { name: "Carlos Ramos", dist: "0.8 km away", area: "Mitte", origin: "Spain" },
+                { name: "Ananya Sharma", dist: "1.4 km away", area: "Prenzlauer Berg", origin: "India" },
+                { name: "Liam Vance", dist: "2.1 km away", area: "Kreuzberg", origin: "UK" },
+                { name: "Elena Rossi", dist: "2.9 km away", area: "Friedrichshain", origin: "Italy" }
+              ].map((p, i) => (
+                <div 
+                  key={i} 
+                  className={`flex items-center gap-3 p-3 rounded-2xl ${T.card2} hover:border-orange-500 transition-all`}
+                >
+                  <Avatar name={p.name} size={9} />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${T.text} truncate`}>{p.name}</p>
+                    <p className={`text-[10px] text-orange-600 font-semibold`}>{p.dist} · {p.area}</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setShowRadarModal(false);
+                      onStartChat ? onStartChat(p.name.toLowerCase().replace(/\s+/g, '-'), p.name) : showToast(`Connecting with ${p.name}...`);
+                    }}
+                    className="bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-sm shrink-0"
+                  >
+                    Say Hi
+                  </button>
                 </div>
               ))}
             </div>

@@ -22,9 +22,9 @@ export const BotTab = ({ setTab, profile, T, messages, onSend, loading }: BotTab
   };
 
   return (
-    <div className="pb-32 flex flex-col min-h-screen">
-      <Header T={T} title={<><PeanutLogo size={24} /> Ask Peanut</>} back={() => setTab("home")} />
-      <div className="flex-1 px-4 space-y-4 mt-4 overflow-y-auto no-scrollbar">
+    <div className="pb-32 flex flex-col min-h-[calc(100vh-140px)] max-w-3xl mx-auto w-full">
+      <Header T={T} hideOnDesktop={true} title={<><PeanutLogo size={24} /> Ask Peanut</>} back={() => setTab("home")} />
+      <div className="flex-1 px-4 lg:px-0 space-y-4 mt-4 overflow-y-auto no-scrollbar">
         {messages.map(m => (
           <div key={m.id} className={`flex ${m.isMe ? "justify-end" : "justify-start"}`}>
             {!m.isMe && <div className="mr-2 mt-1 shrink-0"><PeanutLogo size={28} /></div>}
@@ -47,19 +47,19 @@ export const BotTab = ({ setTab, profile, T, messages, onSend, loading }: BotTab
           </div>
         )}
       </div>
-      <div className={`fixed bottom-16 left-0 right-0 max-w-md mx-auto px-4 py-3 ${T.bg} border-t ${T.line}`}>
-        <div className={`flex items-center gap-2 rounded-full px-4 py-2 ${T.card} border ${T.line} shadow-inner`}>
+      <div className={`fixed md:sticky bottom-16 md:bottom-4 left-0 right-0 max-w-md md:max-w-3xl mx-auto px-4 md:px-0 py-3 ${T.bg} border-t md:border-t-0 ${T.line} z-30`}>
+        <div className={`flex items-center gap-2 rounded-full px-4 py-2 ${T.card} border ${T.line} shadow-sm`}>
           <input 
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSend()}
-            placeholder="Ask Peanut..." 
+            placeholder="Ask Peanut about visas, registering, bank accounts, healthcare..." 
             className={`flex-1 bg-transparent text-sm outline-none py-1.5 ${T.text}`} 
           />
           <button 
             onClick={handleSend}
             disabled={!input.trim() || loading}
-            className={`p-1.5 rounded-full ${(!input.trim() || loading) ? "text-gray-300" : "text-orange-500 hover:bg-orange-50"}`}
+            className={`p-1.5 rounded-full ${(!input.trim() || loading) ? "text-gray-300" : "text-orange-500 hover:bg-orange-50 dark:hover:bg-neutral-800"}`}
           >
             <Send size={18} />
           </button>

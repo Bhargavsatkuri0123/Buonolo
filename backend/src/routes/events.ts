@@ -7,6 +7,18 @@ import { requireAuth, optionalAuth, type AuthedRequest } from "../middleware/aut
 export const eventsRouter = Router();
 
 eventsRouter.get(
+  "/:id/attendees",
+  asyncHandler(async (req, res) => {
+    const attendees = await prisma.eventAttendee.findMany({
+      where: { eventId: req.params.id },
+      include: { user: { select: { id: true, fullName: true, handle: true, origin: true, city: true, avatarUrl: true } } },
+      orderBy: { joinedAt: "asc" },
+    });
+    res.json({ attendees: attendees.map((attendee) => attendee.user) });
+  })
+);
+
+eventsRouter.get(
   "/",
   optionalAuth,
   asyncHandler(async (req: AuthedRequest, res) => {
