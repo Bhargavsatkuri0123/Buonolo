@@ -122,16 +122,6 @@ create policy "Follows viewable by everyone." on public.follows for select using
 create policy "Users can follow/unfollow." on public.follows for insert with check (auth.uid() = follower_id);
 create policy "Users can delete own follow." on public.follows for delete using (auth.uid() = follower_id);
 
--- MESSAGES
-create table public.messages (
-  id uuid default uuid_generate_v4() primary key,
-  sender_id uuid references auth.users on delete cascade not null,
-  receiver_id uuid references auth.users on delete cascade not null,
-  content text not null,
-  is_read boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
-
 -- COMMENTS
 create table public.comments (
   id uuid default uuid_generate_v4() primary key,
@@ -147,10 +137,7 @@ create policy "Comments viewable by everyone." on public.comments for select usi
 create policy "Auth users can comment." on public.comments for insert with check (auth.uid() = author_id);
 alter publication supabase_realtime add table comments;
 
-alter table public.messages enable row level security;
-create policy "Users can view own messages." on public.messages for select using (auth.uid() = sender_id or auth.uid() = receiver_id);
-create policy "Users can send messages." on public.messages for insert with check (auth.uid() = sender_id);
-create policy "Receivers can mark messages as read." on public.messages for update using (auth.uid() = receiver_id);
+
 
 -- NOTIFICATIONS
 create table public.notifications (
@@ -318,114 +305,3 @@ create policy "Public Access to Avatars" on storage.objects for select using ( b
 create policy "Auth users can upload avatars" on storage.objects for insert with check ( bucket_id = 'avatars' AND auth.role() = 'authenticated' );
 create policy "Users can update their own avatars" on storage.objects for update using ( bucket_id = 'avatars' AND auth.uid() = owner );
 create policy "Users can delete their own avatars" on storage.objects for delete using ( bucket_id = 'avatars' AND auth.uid() = owner );
-
--- Curated local service listings; only verified records are public.
-create table if not exists public.local_service_providers (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  category text not null check (category in ('plumber', 'electrician', 'locksmith', 'handyman', 'movers', 'cleaning', 'appliance', 'doctor', 'translator', 'legal_advisor', 'tax_advisor')),
-  category_label text not null,
-  city text not null,
-  host_country text not null,
-  phone text not null,
-  email text not null,
-  languages text[] not null default '{}',
-  hourly_rate text,
-  response_time text,
-  is_verified boolean not null default false,
-  is_expat_specialist boolean not null default false,
-  description text not null default '',
-  features text[] not null default '{}',
-  rating numeric not null default 0 check (rating >= 0 and rating <= 5),
-  review_count integer not null default 0 check (review_count >= 0),
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_providers enable row level security;
-drop policy if exists "Verified local services are public" on public.local_service_providers;
-create policy "Verified local services are public"
-  on public.local_service_providers for select
-  using (is_verified = true);
-
--- Suggestions remain private to their submitter until reviewed by an operator.
-create table if not exists public.local_service_provider_submissions (
-  id uuid primary key default gen_random_uuid(),
-  submitter_id uuid not null references auth.users(id) on delete cascade,
-  business_name text not null,
-  category text not null check (category in ('plumber', 'electrician', 'locksmith', 'handyman', 'movers', 'cleaning', 'appliance', 'doctor', 'translator', 'legal_advisor', 'tax_advisor')),
-  city text not null,
-  host_country text not null,
-  phone text not null,
-  email text not null,
-  website_url text,
-  description text not null,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_provider_submissions enable row level security;
-drop policy if exists "Users can submit local service suggestions" on public.local_service_provider_submissions;
-create policy "Users can submit local service suggestions"
-  on public.local_service_provider_submissions for insert
-  with check (auth.uid() = submitter_id and status = 'pending');
-drop policy if exists "Users can view their own local service suggestions" on public.local_service_provider_submissions;
-create policy "Users can view their own local service suggestions"
-  on public.local_service_provider_submissions for select
-  using (auth.uid() = submitter_id);
-
-create table if not exists public.local_service_provider_reviews (
-  id uuid primary key default gen_random_uuid(),
-  provider_id uuid not null references public.local_service_providers(id) on delete cascade,
-  reviewer_id uuid not null references auth.users(id) on delete cascade,
-  reviewer_name text not null,
-  rating integer not null check (rating between 1 and 5),
-  review_text text not null check (char_length(review_text) between 1 and 2000),
-  city text not null,
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_provider_reviews enable row level security;
-drop policy if exists "Reviews for verified providers are public" on public.local_service_provider_reviews;
-create policy "Reviews for verified providers are public"
-  on public.local_service_provider_reviews for select
-  using (exists (
-    select 1 from public.local_service_providers provider
-    where provider.id = provider_id and provider.is_verified = true
-  ));
-drop policy if exists "Users can review verified providers" on public.local_service_provider_reviews;
-create policy "Users can review verified providers"
-  on public.local_service_provider_reviews for insert
-  with check (
-    auth.uid() = reviewer_id
-    and exists (
-      select 1 from public.local_service_providers provider
-      where provider.id = provider_id and provider.is_verified = true
-    )
-  );
-
-create table if not exists public.local_service_quote_requests (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  provider_id uuid not null references public.local_service_providers(id) on delete cascade,
-  description text not null check (char_length(description) between 1 and 2000),
-  urgency text not null check (urgency in ('flexible', 'today', 'emergency')),
-  contact_method text not null check (contact_method in ('whatsapp', 'email', 'phone')),
-  status text not null default 'pending' check (status in ('pending', 'contacted', 'closed')),
-  created_at timestamptz not null default now()
-);
-
-alter table public.local_service_quote_requests enable row level security;
-drop policy if exists "Users can create quote requests for verified providers" on public.local_service_quote_requests;
-create policy "Users can create quote requests for verified providers"
-  on public.local_service_quote_requests for insert
-  with check (
-    auth.uid() = user_id
-    and exists (
-      select 1 from public.local_service_providers provider
-      where provider.id = provider_id and provider.is_verified = true
-    )
-  );
-drop policy if exists "Users can view their own quote requests" on public.local_service_quote_requests;
-create policy "Users can view their own quote requests"
-  on public.local_service_quote_requests for select
-  using (auth.uid() = user_id);

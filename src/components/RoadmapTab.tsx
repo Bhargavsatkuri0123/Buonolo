@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Plus, X, Check, Wrench, ChevronRight, Flag, Trophy, Target, Trash2 } from "lucide-react";
 import { Header } from "./Header";
 import { Goal, Theme, Profile } from "../types";
+import { GENERATE_GOAL_TEMPLATES } from "../constants";
 
 interface RoadmapTabProps {
   goals: Goal[];
@@ -15,7 +16,6 @@ interface RoadmapTabProps {
   profile: Profile;
   T: Theme;
   user?: any;
-  goalTemplates?: any[];
   onToggleStep?: (gid: string, i: number) => void;
   onAddGoal?: (tpl: any) => void;
   onAddCustomGoal?: (title: string) => void;
@@ -25,7 +25,7 @@ interface RoadmapTabProps {
 
 export const RoadmapTab = ({
   goals, setGoals, openGoal, setOpenGoal, showTemplates, setShowTemplates,
-  setTab, setOpenTool, profile, T, user, goalTemplates = [],
+  setTab, setOpenTool, profile, T, user,
   onToggleStep, onAddGoal, onAddCustomGoal, onAddTask, onDeleteGoal
 }: RoadmapTabProps) => {
   const [localCustomGoalTitle, setLocalCustomGoalTitle] = useState("");
@@ -47,8 +47,13 @@ export const RoadmapTab = ({
       return;
     }
     setGoals(gs => [...gs, {
-      id: "g" + Date.now(), title: tpl.title, cat: tpl.cat, icon: tpl.icon || Target,
-      steps: [{ t: "Get started", d: "Break this goal down into your first milestone.", done: false, tool: "" }],
+      id: "g" + Date.now(), title: tpl.title, cat: tpl.cat, icon: tpl.icon,
+      steps: [
+        { t: "Understand the requirements", d: "Open the linked tool to see the full checklist for your situation and nationality.", done: false, tool: "Registration" },
+        { t: "Gather what you need", d: "Collect documents, translations and fees before booking anything — it prevents repeat visits.", done: false, tool: "Visas & Permits" },
+        { t: "Take the first official step", d: "Book the appointment / enrol / apply. Meet Peanut will remind you of deadlines.", done: false, tool: "Taxes & ID" },
+        { t: "Complete & verify", d: "Confirm you received the certificate, card or confirmation — and save a copy in your documents.", done: false, tool: "Banking" },
+      ],
     }]);
     setShowTemplates(false);
   };
@@ -314,26 +319,29 @@ export const RoadmapTab = ({
   }
   return (
     <div className="pb-24">
-      <Header T={T} title="Roadmap" right={
+      <Header T={T} hideOnDesktop={true} title="Roadmap" right={
         <button onClick={() => setShowTemplates(true)} className="bg-orange-500 text-white p-2 rounded-full shadow-sm hover:opacity-90 active:scale-95 transition-all"><Plus size={18} /></button>} />
-      <p className={`mx-4 text-sm ${T.sub} mb-4`}>Micro-goals for settling into {profile.host}. Set a goal — Meet Peanut breaks it into guided steps.</p>
+      <p className={`mx-4 lg:mx-0 text-sm ${T.sub} mb-6`}>Micro-goals for settling into {profile.host || "your destination"}. Set a goal — Meet Peanut breaks it into guided steps.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mx-4 lg:mx-0">
       {goals.map(g => {
         const done = g.steps.filter(s => s.done).length, pct = Math.round((done / Math.max(1, g.steps.length)) * 100);
         return (
-          <button key={g.id} onClick={() => setOpenGoal(g.id)} className={`${T.card} mx-4 mb-3 rounded-2xl p-4 w-[calc(100%-2rem)] text-left cardin border border-slate-100 dark:border-zinc-800 hover:border-orange-300 dark:hover:border-zinc-700 transition-all shadow-sm group`}>
-            <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform"><g.icon size={20} /></div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-semibold text-sm ${T.text} group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors`}>{g.title}</p>
-                <p className={`text-xs ${T.sub}`}>{g.cat} · {done}/{g.steps.length} milestones done</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="disp font-bold text-orange-600">{pct}%</p>
-                <ChevronRight size={16} className={`${T.sub} ml-auto group-hover:translate-x-0.5 transition-transform`} />
+          <button key={g.id} onClick={() => setOpenGoal(g.id)} className={`${T.card} rounded-2xl p-4 w-full text-left cardin border border-slate-100 dark:border-zinc-800 hover:border-orange-300 dark:hover:border-zinc-700 transition-all shadow-sm group flex flex-col justify-between`}>
+            <div className="w-full">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform"><g.icon size={20} /></div>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-semibold text-sm ${T.text} group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors truncate`}>{g.title}</p>
+                  <p className={`text-xs ${T.sub}`}>{g.cat} · {done}/{g.steps.length} milestones done</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="disp font-bold text-orange-600">{pct}%</p>
+                  <ChevronRight size={16} className={`${T.sub} ml-auto group-hover:translate-x-0.5 transition-transform`} />
+                </div>
               </div>
             </div>
             {/* Segmented Milestone Progress Track */}
-            <div className="flex items-center gap-1 mt-3">
+            <div className="flex items-center gap-1 mt-4 w-full">
               {g.steps.map((step, sIdx) => (
                 <div 
                   key={sIdx}
@@ -346,31 +354,30 @@ export const RoadmapTab = ({
           </button>
         );
       })}
+      </div>
       {showTemplates && (
-        <div className="fixed inset-0 z-40 bg-black/50 flex items-end justify-center" onClick={() => setShowTemplates(false)}>
-          <div className={`${T.card} w-full max-w-md rounded-t-3xl p-5 max-h-[85vh] flex flex-col`} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowTemplates(false)}>
+          <div className={`${T.card} w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] flex flex-col shadow-2xl`} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-1 shrink-0">
-              <h2 className={`disp font-bold text-lg ${T.text}`}>Choose a goal</h2>
-              <button onClick={() => setShowTemplates(false)}><X size={20} className={T.sub} /></button>
+              <h2 className={`disp font-bold text-xl ${T.text}`}>Choose a goal template</h2>
+              <button onClick={() => setShowTemplates(false)} className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-neutral-800"><X size={20} className={T.sub} /></button>
             </div>
-            <p className={`text-xs ${T.sub} mb-4 shrink-0`}>Curated for newcomers. Each comes with a step-by-step guided plan.</p>
-
+            <p className={`text-xs ${T.sub} mb-4 shrink-0`}>Curated for newcomers in {profile.host || "your country"}. Each comes with a step-by-step guided plan.</p>
+            
             <div className="flex gap-2 mb-4 shrink-0">
-              <input value={localCustomGoalTitle} onChange={e => setLocalCustomGoalTitle(e.target.value)} placeholder="Or create a custom goal..." className={`flex-1 ${T.input} rounded-xl px-3 py-2 text-sm outline-none`} />
-              <button onClick={addCustomGoal} className="bg-orange-500 text-white px-3 py-2 rounded-xl text-sm font-bold">Add</button>
+              <input value={localCustomGoalTitle} onChange={e => setLocalCustomGoalTitle(e.target.value)} placeholder="Or create a custom goal..." className={`flex-1 ${T.input} rounded-xl px-4 py-2.5 text-sm outline-none border ${T.line}`} />
+              <button onClick={addCustomGoal} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-orange-500/15 transition-all">Add</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
-              {goalTemplates.length === 0 ? (
-                <p className={`text-xs ${T.sub} text-center py-6`}>No goal templates available right now.</p>
-              ) : goalTemplates.map(t => (
-                <button key={t.id} onClick={() => addGoal(t)} className={`flex items-center gap-3 w-full text-left p-3 rounded-xl mb-2 ${T.card2}`}>
-                  <div className="w-9 h-9 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0"><t.icon size={17} /></div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-semibold ${T.text}`}>{t.title}</p>
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-6 space-y-2">
+              {(GENERATE_GOAL_TEMPLATES(profile?.origin || "USA", profile?.city || "Berlin", profile?.host || "Germany")).map(t => (
+                <button key={t.id} onClick={() => addGoal(t)} className={`flex items-center gap-3 w-full text-left p-3.5 rounded-2xl ${T.card2} hover:border-orange-300 transition-all border ${T.line}`}>
+                  <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-sm"><t.icon size={18} /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${T.text} truncate`}>{t.title}</p>
                     <p className={`text-xs ${T.sub}`}>{t.cat} · typically {t.weeks}</p>
                   </div>
-                  <Plus size={16} className="text-orange-500" />
+                  <Plus size={18} className="text-orange-500 shrink-0" />
                 </button>
               ))}
             </div>

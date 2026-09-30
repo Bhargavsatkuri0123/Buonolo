@@ -1,8 +1,8 @@
 import React from "react";
-import { Globe2, ArrowLeft } from "lucide-react";
+import { Globe2, ArrowLeft, ArrowUpRight } from "lucide-react";
 import { LOCATIONS } from "../constants";
 import { Theme } from "../types";
-import meetPeanutIcon from "../assets/images/meetpeanut-icon.jpeg";
+import { PeanutLogo, Logo } from "./Header";
 
 interface AuthFlowProps {
   authScreen: string;
@@ -44,6 +44,7 @@ interface AuthFlowProps {
   ) => void;
   toastError: string;
   T: Theme;
+  onOpenLanding?: () => void;
 }
 
 export const AuthFlow = ({
@@ -52,12 +53,19 @@ export const AuthFlow = ({
   authCustomHost, setAuthCustomHost, authCustomCity, setAuthCustomCity,
   authSituation, setAuthSituation, authFocus, setAuthFocus,
   authLoading, handleGoogleLogin, handleEmailLogin, handleEmailRegister, handleDemoLogin, handleSetupSave,
-  toastError, T
+  toastError, T, onOpenLanding
 }: AuthFlowProps) => {
   if (authScreen === "intro") return (
-    <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 ${T.bg} text-center`}>
-      <img src={meetPeanutIcon} alt="Meet Peanut" className="h-40 w-40 object-contain mb-2" />
-      <div className="w-full mt-10 space-y-3 max-w-sm">
+    <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 ${T.bg} text-center overflow-y-auto`}>
+      <div className="flex flex-col items-center justify-center mb-4 cursor-pointer group" onClick={onOpenLanding} title="View Meet Peanut Landing Page">
+        <div className="w-24 h-24 rounded-3xl flex items-center justify-center shadow-xl shadow-orange-500/10 bg-gradient-to-b from-[#FFFDF9] to-[#FFF3E8] dark:from-neutral-800 dark:to-neutral-900 border border-orange-200/80 dark:border-neutral-700 mb-3 transition-transform group-hover:scale-105 duration-200">
+          <PeanutLogo size={68} />
+        </div>
+        <Logo size={36} showIcon={false} onClick={onOpenLanding} />
+      </div>
+      <p className={`mt-1 ${T.sub} max-w-sm text-sm`}>Your all-in-one companion for settling in, local bureaucracy, and belonging anywhere in the world.</p>
+      
+      <div className="w-full mt-8 space-y-3 max-w-sm">
         <button onClick={handleGoogleLogin} disabled={authLoading} className="w-full bg-white text-gray-800 border border-gray-200 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-3 shadow-sm hover:bg-gray-50 transition-colors">
           <Globe2 size={20} /> Continue with Google
         </button>
@@ -65,8 +73,14 @@ export const AuthFlow = ({
           Continue with Email
         </button>
         {handleDemoLogin && (
-          <button onClick={handleDemoLogin} className={`w-full ${T.card2} border ${T.line} ${T.text} font-semibold py-3 rounded-2xl transition-colors hover:border-orange-400`}>
-            Explore as Guest / Demo
+          <button onClick={handleDemoLogin} className={`w-full ${T.card2} border ${T.line} ${T.text} font-semibold py-3 rounded-2xl transition-colors hover:border-orange-400 flex items-center justify-center gap-2`}>
+            <span>🚀 Explore as Guest / Demo</span>
+          </button>
+        )}
+        {onOpenLanding && (
+          <button onClick={onOpenLanding} className="w-full text-xs font-semibold text-orange-600 dark:text-orange-400 hover:underline pt-2 flex items-center justify-center gap-1">
+            <span>Learn about Meet Peanut & Features</span>
+            <ArrowUpRight size={14} />
           </button>
         )}
       </div>
@@ -110,7 +124,7 @@ export const AuthFlow = ({
     <div className={`fixed inset-0 z-50 flex flex-col ${T.bg}`}>
       <div className="p-6 text-center">
         <h1 className={`disp font-bold text-2xl ${T.text}`}>Welcome, {authName.split(' ')[0]}!</h1>
-        <p className={`mt-1 text-sm ${T.sub}`}>Let's tailor Meet Peanut to your journey.</p>
+        <p className={`mt-1 text-sm ${T.sub}`}>Let's tailor meet peanut to your journey.</p>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); setAuthScreen("assessment"); }} className="px-6 space-y-4 max-w-md mx-auto w-full overflow-y-auto pb-12 no-scrollbar">
         <div>

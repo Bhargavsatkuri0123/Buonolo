@@ -3,7 +3,7 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "site": "buonolo",
+    "site": "meet-peanut",
     "public": ".",
     "ignore": [
       "firebase.json",
