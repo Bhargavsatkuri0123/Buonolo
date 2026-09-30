@@ -1,10 +1,9 @@
 name: Build and deploy
 
 # Reusable build + deploy used by build-dev.yml and build-qa.yml. Per-environment
-# settings come from the matching GitHub Environment ("dev" / "qa") as variables:
-#   DEPLOY_HOST, DEPLOY_PATH, AWS_ROLE_ARN, NGINX_CONF_FILE
-# qa falls back to the values this workflow originally hard-coded; dev has no
-# fallbacks so it can't accidentally deploy onto the qa box.
+# QA settings come from its GitHub Environment, with the original values as
+# fallbacks. Dev reuses the original hard-coded target, which shares the host
+# and path with QA.
 
 on:
   workflow_call:
@@ -72,7 +71,10 @@ jobs:
               : "${NGINX_CONF_FILE:=nginx.qa.conf}"
               ;;
             dev)
-              : "${NGINX_CONF_FILE:=nginx.conf}"
+              DEPLOY_HOST=13.40.179.189
+              DEPLOY_PATH=/opt/buonolo
+              AWS_ROLE_ARN=arn:aws:iam::940127591852:role/codebuild-buonolo_dev-service-role
+              NGINX_CONF_FILE=nginx.conf
               ;;
             *)
               echo "::error::Unknown environment '$TARGET_ENV' (expected dev or qa)"; exit 1
