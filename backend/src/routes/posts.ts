@@ -7,6 +7,7 @@ import { requireAuth, optionalAuth, type AuthedRequest } from "../middleware/aut
 import { publishEvent } from "../ws/gateway.js";
 import { notifyUser } from "../lib/notify.js";
 import { cacheInvalidatePrefix } from "../redis.js";
+import { env } from "../env.js";
 
 export const postsRouter = Router();
 
@@ -21,12 +22,25 @@ const postInclude = (viewerId: string | undefined) =>
 
 type PostWithRelations = Prisma.PostGetPayload<{ include: ReturnType<typeof postInclude> }>;
 
+function resolveAttachmentUrl(attachment: string | null): string | null {
+  if (!attachment || env.storageBackend !== "s3" || !env.s3PublicBaseUrl) return attachment;
+
+  const url = new URL(attachment, "https://legacy.invalid");
+  const legacyPrefix = "/s3-uploads/";
+  const legacyIndex = url.pathname.indexOf(legacyPrefix);
+  if (legacyIndex < 0) return attachment;
+
+  const key = url.pathname.slice(legacyIndex + legacyPrefix.length);
+  if (!key) return attachment;
+  return `${env.s3PublicBaseUrl.replace(/\/$/, "")}/${key}${url.search}`;
+}
+
 function serializePost(post: PostWithRelations) {
   return {
     id: post.id,
     author: post.author,
     content: post.content,
-    attachment: post.attachment,
+    attachment: resolveAttachmentUrl(post.attachment),
     bgTheme: post.bgTheme,
     feeling: post.feeling,
     location: post.location,
