@@ -89,6 +89,8 @@ export default function MeetPeanutApp() {
     icon: Target,
     steps: goal.steps,
   })));
+  const [goalsLoading, setGoalsLoading] = useState(false);
+  const [goalsError, setGoalsError] = useState("");
   const [profile, setProfile] = useState<Profile | null>(DEFAULT_PROFILE);
   const [emergencyData, setEmergencyData] = useState<any[]>(() => TEMPLATE_HOST_INFO("USA", "Berlin", "Germany").emergency);
   const [newsData, setNewsData] = useState<any[]>(() => TEMPLATE_HOST_INFO("USA", "Berlin", "Germany").news);
@@ -451,6 +453,8 @@ export default function MeetPeanutApp() {
   };
 
   const fetchGoals = async () => {
+    setGoalsLoading(true);
+    setGoalsError("");
     try {
       const { goals: apiGoals } = await api.goals.list();
       if (!apiGoals.length) {
@@ -463,11 +467,16 @@ export default function MeetPeanutApp() {
             { text: "Health Insurance Setup", description: "Confirm your statutory or private coverage certificate.", tool: "Insurance" },
           ],
         });
-        return fetchGoals();
+        const { goals: createdGoals } = await api.goals.list();
+        setGoals(createdGoals.map((goal: any) => ({ ...mapGoalFromApi(goal), icon: Target })));
+        return;
       }
       setGoals(apiGoals.map((goal: any) => ({ ...mapGoalFromApi(goal), icon: Target })));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load goals", error);
+      setGoalsError(error.message || "Could not load your roadmap. Please try again.");
+    } finally {
+      setGoalsLoading(false);
     }
   };
 
@@ -1106,6 +1115,7 @@ export default function MeetPeanutApp() {
                 goals={goals} setGoals={setGoals} openGoal={openGoal} setOpenGoal={setOpenGoal} 
                 showTemplates={showTemplates} setShowTemplates={setShowTemplates} setTab={setTab} 
                 setOpenTool={setOpenTool} profile={profile!} T={T} 
+                loading={goalsLoading} error={goalsError} onRefresh={fetchGoals}
                 user={user}
                 onToggleStep={handleToggleStep}
                 onAddGoal={handleAddGoal}

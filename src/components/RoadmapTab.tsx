@@ -16,6 +16,9 @@ interface RoadmapTabProps {
   profile: Profile;
   T: Theme;
   user?: any;
+  loading?: boolean;
+  error?: string;
+  onRefresh?: () => void;
   onToggleStep?: (gid: string, i: number) => void;
   onAddGoal?: (tpl: any) => void;
   onAddCustomGoal?: (title: string) => void;
@@ -26,7 +29,8 @@ interface RoadmapTabProps {
 export const RoadmapTab = ({
   goals, setGoals, openGoal, setOpenGoal, showTemplates, setShowTemplates,
   setTab, setOpenTool, profile, T, user,
-  onToggleStep, onAddGoal, onAddCustomGoal, onAddTask, onDeleteGoal
+  onToggleStep, onAddGoal, onAddCustomGoal, onAddTask, onDeleteGoal,
+  loading = false, error = "", onRefresh
 }: RoadmapTabProps) => {
   const [localCustomGoalTitle, setLocalCustomGoalTitle] = useState("");
 
@@ -322,6 +326,21 @@ export const RoadmapTab = ({
       <Header T={T} hideOnDesktop={true} title="Roadmap" right={
         <button onClick={() => setShowTemplates(true)} className="bg-orange-500 text-white p-2 rounded-full shadow-sm hover:opacity-90 active:scale-95 transition-all"><Plus size={18} /></button>} />
       <p className={`mx-4 lg:mx-0 text-sm ${T.sub} mb-6`}>Micro-goals for settling into {profile.host || "your destination"}. Set a goal — Meet Peanut breaks it into guided steps.</p>
+      {loading ? (
+        <p role="status" className={`mx-4 lg:mx-0 py-12 text-center text-sm ${T.sub}`}>Loading your roadmap…</p>
+      ) : error ? (
+        <div role="alert" className={`${T.card} mx-4 lg:mx-0 p-6 rounded-2xl border ${T.line} text-center`}>
+          <p className={`text-sm ${T.text}`}>{error}</p>
+          {onRefresh && <button onClick={onRefresh} className="mt-4 text-sm font-semibold text-orange-600 hover:underline">Retry</button>}
+        </div>
+      ) : goals.length === 0 ? (
+        <div className={`${T.card} mx-4 lg:mx-0 p-8 rounded-2xl border ${T.line} text-center`}>
+          <Target size={28} className="mx-auto text-orange-500" />
+          <p className={`mt-3 font-semibold ${T.text}`}>Your roadmap is ready to start</p>
+          <p className={`mt-1 text-sm ${T.sub}`}>Add a goal to see your milestones here.</p>
+          <button onClick={() => setShowTemplates(true)} className="mt-4 px-4 py-2 rounded-xl bg-orange-500 text-white text-sm font-semibold">Choose a goal</button>
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mx-4 lg:mx-0">
       {goals.map(g => {
         const done = g.steps.filter(s => s.done).length, pct = Math.round((done / Math.max(1, g.steps.length)) * 100);
